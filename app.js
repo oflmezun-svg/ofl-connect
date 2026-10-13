@@ -17,11 +17,18 @@
   const S = {
     oturum: null,
     liste: [],
-    filtre: { q: '', yil: '', sehir: '', sirala: 'yil' },
+    filtre: { q: '', tur: '', yil: '', sehir: '', sirala: 'yil' },
     sayfa: 1,
     basvuruSekmesi: 'onay',
+    duyuruSekmesi: 'aktif',
+    duyurular: null,
+    acilisYapildi: false,
+    sifreOner: false,
+    kapaninca: null,
     kurulumOlayi: null
   };
+  const ROL_ADI = { admin: 'Yönetici', mezun: 'Mezun', ogretmen: 'Öğretmen' };
+  const KURULU = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 
   if (DEMO) byId('demo-serit').hidden = false;
 
@@ -34,6 +41,17 @@
   const tarihYaz = iso => iso ? new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
   const renkTonu = id => { let h = 0; for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
   const adSoyad = k => `${k.ad} ${k.soyad}`;
+  const ogretmen = k => k.tur === 'ogretmen';
+  // Rehberde adın altındaki kısa tanım: "2011 mezunu" veya "Kimya öğretmeni"
+  const kimlikYazisi = k => ogretmen(k) ? `${k.brans ? k.brans + ' öğretmeni' : 'Öğretmen'}` : `${k.yil} mezunu`;
+  const tarihSaat = iso => iso ? new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+  const yerelGirdi = t => { const d = new Date(t); d.setSeconds(0, 0); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16); };
+  function yerelDepo(anahtar, deger) {
+    try {
+      if (deger === undefined) return JSON.parse(localStorage.getItem(anahtar));
+      if (deger === null) localStorage.removeItem(anahtar); else localStorage.setItem(anahtar, JSON.stringify(deger));
+    } catch (e) { return null; }
+  }
   const telRakam = t => String(t || '').replace(/\D/g, '');
 
   const IKON = {
@@ -65,7 +83,13 @@
     sol: '<path d="m15 18-6-6 6-6"/>',
     sag: '<path d="m9 18 6-6-6-6"/>',
     bilgi: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
-    takvim: '<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>'
+    takvim: '<rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/>',
+    duyuru: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+    anahtar: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/>',
+    saat: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    dis: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+    ogretmen: '<path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/>',
+    kisiEkle: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>'
   };
   const ikon = (ad, sinif) => `<svg class="ikon ${sinif || ''}" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${IKON[ad]}</svg>`;
 
@@ -109,10 +133,11 @@
 
   let oncekiOdak = null;
 
-  function cekmeceAc({ bas, govde, alt, etiket, genis }) {
+  function cekmeceAc({ bas, govde, alt, etiket, genis, orta }) {
     if (!$katman.classList.contains('acik')) oncekiOdak = document.activeElement;
+    $katman.classList.toggle('orta-katman', !!orta);
     $katman.innerHTML = `<div class="perde" data-ac="kapat"></div>
-      <section class="cekmece ${genis ? 'genis' : ''}" role="dialog" aria-modal="true" aria-label="${esc(etiket)}">
+      <section class="cekmece ${genis ? 'genis' : ''} ${orta ? 'orta' : ''}" role="dialog" aria-modal="true" aria-label="${esc(etiket)}">
         <header class="cekmece-bas">${bas}<button class="ikon-dugme" data-ac="kapat" aria-label="Kapat">${ikon('kapat')}</button></header>
         <div class="cekmece-govde">${govde}</div>
         ${alt ? `<footer class="cekmece-alt">${alt}</footer>` : ''}
@@ -130,6 +155,10 @@
     document.body.classList.remove('kilitli');
     if (oncekiOdak && document.contains(oncekiOdak)) oncekiOdak.focus({ preventScroll: true });
     oncekiOdak = null;
+    // Bir pencere kapanınca sıradaki (ör. şifre önerisinden sonra duyuru bildirimi) açılır.
+    const sonraki = S.kapaninca;
+    S.kapaninca = null;
+    if (sonraki) setTimeout(sonraki, 250);
   }
 
   function onayIste(mesaj, dugme, tehlikeli) {
@@ -177,9 +206,11 @@
    * Yönlendirme
    * ===================================================================== */
 
+  const UYE_MENU = [['rehber', 'Rehber', 'kisiler'], ['duyurular', 'Duyurular', 'duyuru'], ['profil', 'Profilim', 'kisi']];
   const MENU = {
-    mezun: [['rehber', 'Mezun Rehberi', 'kisiler'], ['profil', 'Profilim', 'kisi']],
-    admin: [['rehber', 'Mezun Rehberi', 'kisiler'], ['basvurular', 'Başvurular', 'gelen'], ['panel', 'Yönetim Paneli', 'grafik']]
+    mezun: UYE_MENU,
+    ogretmen: UYE_MENU,
+    admin: [['rehber', 'Rehber', 'kisiler'], ['duyurular', 'Duyurular', 'duyuru'], ['basvurular', 'Başvurular', 'gelen'], ['panel', 'Yönetim Paneli', 'grafik']]
   };
 
   async function yonlendir() {
@@ -188,11 +219,14 @@
     S.oturum = Api.oturum();
     if (!S.oturum) return yol === 'kayit' ? kayitEkrani() : girisEkrani();
 
-    const menu = MENU[S.oturum.rol];
+    const menu = MENU[S.oturum.rol] || MENU.mezun;
     if (!menu.some(m => m[0] === yol)) { location.replace('#/rehber'); return; }
     kabuk(yol);
-    const ekran = { rehber: rehberEkrani, profil: profilEkrani, basvurular: basvurularEkrani, panel: panelEkrani }[yol];
-    try { await ekran(); }
+    const ekran = { rehber: rehberEkrani, duyurular: duyurularEkrani, profil: profilEkrani, basvurular: basvurularEkrani, panel: panelEkrani }[yol];
+    try {
+      await ekran();
+      if (!S.acilisYapildi) { S.acilisYapildi = true; acilisIslemleri(); }
+    }
     catch (e) {
       hataGoster(e);
       byId('icerik').innerHTML = bosDurum('bilgi', 'Sayfa yüklenemedi', esc(e.kullaniciMesaji ? e.message : 'Lütfen tekrar deneyin.')) +
@@ -208,9 +242,11 @@
 
   function kabuk(aktif) {
     const admin = S.oturum.rol === 'admin';
-    const menuHtml = MENU[S.oturum.rol].map(([y, ad, ik]) =>
+    const rozet = y => y === 'basvurular' ? '<span class="menu-rozet" data-rozet hidden></span>'
+      : y === 'duyurular' && !admin ? '<span class="menu-rozet" data-duyuru-rozet hidden></span>' : '';
+    const menuHtml = (MENU[S.oturum.rol] || MENU.mezun).map(([y, ad, ik]) =>
       `<a href="#/${y}" class="menu-ogesi ${y === aktif ? 'aktif' : ''}" ${y === aktif ? 'aria-current="page"' : ''}>
-        ${ikon(ik)}<span>${ad}</span>${y === 'basvurular' ? '<span class="menu-rozet" data-rozet hidden></span>' : ''}
+        ${ikon(ik)}<span>${ad}</span>${rozet(y)}
       </a>`).join('');
     const parca = S.oturum.ad.split(' ');
     const ben = { id: S.oturum.id, ad: parca[0], soyad: parca.slice(-1)[0] };
@@ -227,7 +263,8 @@
             <button class="menu-ogesi kurulum-dugmesi" data-ac="kur" hidden>${ikon('yukle')}<span>Uygulamayı yükle</span></button>
             <div class="kullanici-kart">
               ${avatar(ben, 'kucuk')}
-              <div class="kullanici-yazi"><strong>${esc(S.oturum.ad)}</strong><small>${admin ? 'Yönetici' : 'Mezun'}</small></div>
+              <div class="kullanici-yazi"><strong>${esc(S.oturum.ad)}</strong><small>${ROL_ADI[S.oturum.rol] || 'Mezun'}</small></div>
+              <button class="ikon-dugme" data-ac="hesap" aria-label="Giriş ve şifre ayarları" title="Giriş ve şifre">${ikon('anahtar')}</button>
               <button class="ikon-dugme" data-ac="cikis" aria-label="Çıkış yap" title="Çıkış yap">${ikon('cikis')}</button>
             </div>
           </div>
@@ -236,6 +273,7 @@
           <header class="mobil-ust">
             <a class="marka" href="#/rehber"><img src="icons/ofl-logo.png" alt="" class="marka-logo"><span class="marka-yazi"><strong>OFL Connect</strong></span></a>
             <button class="ikon-dugme kurulum-dugmesi" data-ac="kur" aria-label="Uygulamayı yükle" hidden>${ikon('yukle')}</button>
+            <button class="ikon-dugme" data-ac="hesap" aria-label="Giriş ve şifre ayarları">${ikon('anahtar')}</button>
             <button class="ikon-dugme" data-ac="cikis" aria-label="Çıkış yap">${ikon('cikis')}</button>
           </header>
           <div id="ios-ipucu"></div>
@@ -245,6 +283,7 @@
       </div>`;
     kurulumDugmesiniGuncelle();
     if (admin) rozetleriGuncelle();
+    else duyuruRozetiniGuncelle();
   }
 
   async function rozetleriGuncelle() {
@@ -275,38 +314,73 @@
     </section>`;
   }
 
-  function girisEkrani() {
+  function hatirlaKutusu(on) {
+    return `<label class="onay-kutusu hatirla">
+      <input type="checkbox" name="hatirla" id="${on}-hatirla" ${KURULU() ? 'checked' : ''}>
+      <span><strong>Bu cihazda oturumum açık kalsın</strong><small>Uygulamayı her açtığınızda yeniden giriş yapmanız gerekmez. Ortak kullanılan cihazlarda işaretlemeyin.</small></span>
+    </label>`;
+  }
+
+  function girisEkrani(kip) {
+    const hesap = Api.hesap();
+    // Şifresi olan hatırlanan hesap: e-posta sabit, yalnızca şifre sorulur (banka uygulamaları gibi).
+    const sifreKipi = kip !== 'kod' && hesap && hesap.sifreVar && hesap.eposta;
+    const ilkAd = hesap && hesap.ad ? hesap.ad.split(' ')[0] : '';
+
     $app.innerHTML = `
       <div class="giris-duzen">
         ${markaPaneli()}
         <main class="giris-alan">
           <div class="giris-kutu">
             <img src="icons/ofl-logo.png" alt="" class="giris-mobil-logo">
-            <h2>Giriş yap</h2>
-            <p class="soluk">E-posta adresinize tek kullanımlık bir giriş kodu göndereceğiz. Şifre gerekmez.</p>
+            ${sifreKipi ? `
+              <h2>Tekrar hoş geldiniz${ilkAd ? ', ' + esc(ilkAd) : ''}</h2>
+              <p class="soluk">Şifrenizle giriş yapın.</p>
+              <form id="f-sifre" class="form" novalidate>
+                <div class="hesap-cipi">${avatar({ id: hesap.eposta, ad: (hesap.ad || hesap.eposta).split(' ')[0], soyad: (hesap.ad || '').split(' ').slice(-1)[0] })}
+                  <span><strong>${esc(hesap.ad || '')}</strong><small>${esc(hesap.eposta)}</small></span></div>
+                <input type="email" name="eposta" value="${esc(hesap.eposta)}" autocomplete="username" hidden>
+                <div class="alan"><label for="g-sifre">Şifre</label>
+                  <div class="sifre-girdisi">
+                    <input id="g-sifre" type="password" name="sifre" autocomplete="current-password" required>
+                    <button type="button" class="ikon-dugme kucuk" data-goster="g-sifre" aria-label="Şifreyi göster">${ikon('goz')}</button>
+                  </div>
+                </div>
+                ${hatirlaKutusu('s')}
+                <button class="dugme buyuk genis" type="submit">Giriş yap</button>
+              </form>
+              <div class="giris-baglantilari">
+                <button class="dugme metin" type="button" data-giris-ac="unuttum">Şifremi unuttum — e-posta koduyla gir</button>
+                <button class="dugme metin" type="button" data-giris-ac="farkli">Farklı hesapla giriş yap</button>
+              </div>` : `
+              <h2>Giriş yap</h2>
+              <p class="soluk">E-posta adresinize tek kullanımlık bir giriş kodu göndereceğiz. Giriş yaptıktan sonra isterseniz bir şifre belirleyip sonraki girişlerde onu kullanabilirsiniz.</p>
 
-            <form id="f-eposta" class="form" novalidate>
-              <div class="alan"><label for="g-eposta">E-posta adresi</label>
-                <input id="g-eposta" type="email" name="eposta" autocomplete="email" inputmode="email" placeholder="ornek@gmail.com" required>
-              </div>
-              <button class="dugme buyuk genis" type="submit">Giriş kodu gönder</button>
-            </form>
+              <form id="f-eposta" class="form" novalidate>
+                <div class="alan"><label for="g-eposta">E-posta adresi</label>
+                  <input id="g-eposta" type="email" name="eposta" value="${esc(hesap && hesap.eposta || '')}" autocomplete="email" inputmode="email" placeholder="ornek@gmail.com" required>
+                </div>
+                <button class="dugme buyuk genis" type="submit">Giriş kodu gönder</button>
+              </form>
 
-            <form id="f-kod" class="form" novalidate hidden>
-              <div class="bilgi-kutu">${ikon('eposta')}<span><strong id="kod-eposta"></strong> adresine bir giriş kodu gönderdik.
-                ${DEMO ? `<br>Demo için kod: <strong>${Api.DEMO_KOD}</strong>` : 'Adres sistemde kayıtlıysa kod birkaç dakika içinde gelir. Spam klasörünü de kontrol edin.'}</span></div>
-              <div class="alan"><label for="g-kod">6 haneli kod</label>
-                <input id="g-kod" class="kod-girdisi" name="kod" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" required>
-              </div>
-              <button class="dugme buyuk genis" type="submit">Giriş yap</button>
-              <button class="dugme metin genis" type="button" data-giris-ac="geri">Farklı bir e-posta kullan</button>
-            </form>
+              <form id="f-kod" class="form" novalidate hidden>
+                <div class="bilgi-kutu">${ikon('eposta')}<span><strong id="kod-eposta"></strong> adresine bir giriş kodu gönderdik.
+                  ${DEMO ? `<br>Demo için kod: <strong>${Api.DEMO_KOD}</strong>` : 'Adres sistemde kayıtlıysa kod birkaç dakika içinde gelir. Spam klasörünü de kontrol edin.'}</span></div>
+                <div class="alan"><label for="g-kod">6 haneli kod</label>
+                  <input id="g-kod" class="kod-girdisi" name="kod" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" required>
+                </div>
+                ${hatirlaKutusu('k')}
+                <button class="dugme buyuk genis" type="submit">Giriş yap</button>
+                <button class="dugme metin genis" type="button" data-giris-ac="geri">Farklı bir e-posta kullan</button>
+              </form>
+              ${hesap && hesap.sifreVar ? `<div class="giris-baglantilari"><button class="dugme metin" type="button" data-giris-ac="sifreye-don">Şifreyle giriş yap</button></div>` : ''}`}
 
             ${DEMO ? `
               <div class="ayrac"><span>Demo için hızlı giriş</span></div>
-              <div class="hizli-giris">
-                <button class="dugme ikincil" data-giris="admin">${ikon('kalkan')}<span>Yönetici olarak</span></button>
-                <button class="dugme ikincil" data-giris="mezun">${ikon('kisi')}<span>Mezun olarak <small>(Elif Aydın)</small></span></button>
+              <div class="hizli-giris uclu">
+                <button class="dugme ikincil" data-giris="admin">${ikon('kalkan')}<span>Yönetici</span></button>
+                <button class="dugme ikincil" data-giris="mezun">${ikon('kisi')}<span>Mezun <small>(Elif Aydın)</small></span></button>
+                <button class="dugme ikincil" data-giris="ogretmen">${ikon('ogretmen')}<span>Öğretmen <small>(Serap Güneş)</small></span></button>
               </div>` : ''}
 
             <p class="giris-kayit">Henüz kaydınız yok mu? <a href="#/kayit">Mezun kaydı oluşturun</a></p>
@@ -314,31 +388,161 @@
         </main>
       </div>`;
 
+    const girildi = o => {
+      // Kodla girip henüz şifresi olmayanlara bir kez şifre belirleme önerilir.
+      S.sifreOner = !o.sifreVar && !yerelDepo('ofl-sifre-onerisi-' + o.id);
+      S.acilisYapildi = false;
+      git('#/rehber');
+    };
+    const baglan = (ac, f) => { const b = $app.querySelector(`[data-giris-ac="${ac}"]`); if (b) b.addEventListener('click', f); };
+
+    $app.querySelectorAll('[data-goster]').forEach(b => b.addEventListener('click', () => {
+      const g = byId(b.dataset.goster);
+      const gizli = g.type === 'password';
+      g.type = gizli ? 'text' : 'password';
+      b.innerHTML = ikon(gizli ? 'gozKapali' : 'goz');
+      b.setAttribute('aria-label', gizli ? 'Şifreyi gizle' : 'Şifreyi göster');
+    }));
+
+    const fS = byId('f-sifre');
+    if (fS) {
+      fS.addEventListener('submit', async ev => {
+        ev.preventDefault();
+        if (!fS.sifre.value) { fS.sifre.setAttribute('aria-invalid', 'true'); return bildir('Şifrenizi girin.', 'hata'); }
+        const b = fS.querySelector('button[type=submit]'); b.disabled = true;
+        try { girildi(await Api.sifreIleGiris(hesap.eposta, fS.sifre.value, fS.hatirla.checked)); }
+        catch (e) { hataGoster(e); fS.sifre.select(); } finally { b.disabled = false; }
+      });
+      setTimeout(() => fS.sifre.focus(), 50);
+      baglan('unuttum', async () => {
+        girisEkrani('kod');
+        const f = byId('f-eposta');
+        f.eposta.value = hesap.eposta;
+        f.requestSubmit();
+      });
+      baglan('farkli', () => { Api.hesapUnut(); girisEkrani(); });
+    }
+
     const fE = byId('f-eposta');
     const fK = byId('f-kod');
-    let eposta = '';
-    fE.addEventListener('submit', async ev => {
-      ev.preventDefault();
-      eposta = fE.eposta.value.trim();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(eposta)) { fE.eposta.setAttribute('aria-invalid', 'true'); return bildir('Geçerli bir e-posta adresi girin.', 'hata'); }
-      const b = fE.querySelector('button'); b.disabled = true;
-      try {
-        await Api.girisKoduGonder(eposta);
-        byId('kod-eposta').textContent = eposta;
-        fE.hidden = true; fK.hidden = false; fK.kod.focus();
-      } catch (e) { hataGoster(e); } finally { b.disabled = false; }
-    });
-    fK.addEventListener('submit', async ev => {
-      ev.preventDefault();
-      const b = fK.querySelector('button[type=submit]'); b.disabled = true;
-      try { await Api.girisYap(eposta, fK.kod.value); git('#/rehber'); }
-      catch (e) { hataGoster(e); fK.kod.select(); } finally { b.disabled = false; }
-    });
-    fK.querySelector('[data-giris-ac="geri"]').addEventListener('click', () => { fK.hidden = true; fE.hidden = false; fE.eposta.focus(); });
+    if (fE) {
+      let eposta = '';
+      fE.addEventListener('submit', async ev => {
+        ev.preventDefault();
+        eposta = fE.eposta.value.trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(eposta)) { fE.eposta.setAttribute('aria-invalid', 'true'); return bildir('Geçerli bir e-posta adresi girin.', 'hata'); }
+        const b = fE.querySelector('button'); b.disabled = true;
+        try {
+          await Api.girisKoduGonder(eposta);
+          byId('kod-eposta').textContent = eposta;
+          fE.hidden = true; fK.hidden = false; fK.kod.focus();
+        } catch (e) { hataGoster(e); } finally { b.disabled = false; }
+      });
+      fK.addEventListener('submit', async ev => {
+        ev.preventDefault();
+        const b = fK.querySelector('button[type=submit]'); b.disabled = true;
+        try { girildi(await Api.girisYap(eposta, fK.kod.value, fK.hatirla.checked)); }
+        catch (e) { hataGoster(e); fK.kod.select(); } finally { b.disabled = false; }
+      });
+      baglan('geri', () => { fK.hidden = true; fE.hidden = false; fE.eposta.focus(); });
+      baglan('sifreye-don', () => girisEkrani());
+    }
+
     $app.querySelectorAll('[data-giris]').forEach(b => b.addEventListener('click', async () => {
-      await Api.demoGiris(b.dataset.giris === 'admin' ? 'admin' : 'mezun');
-      git('#/rehber');
+      girildi(await Api.demoGiris(b.dataset.giris));
     }));
+  }
+
+  /* =====================================================================
+   * Hesap: şifre belirleme / değiştirme
+   * ===================================================================== */
+
+  function sifreFormu(ilk) {
+    return `<form class="form sifre-formu" novalidate>
+      <input type="email" name="kullanici" autocomplete="username" hidden>
+      <div class="alan"><label for="h-sifre">${ilk ? 'Şifre' : 'Yeni şifre'}</label>
+        <div class="sifre-girdisi">
+          <input id="h-sifre" type="password" name="sifre" autocomplete="new-password" minlength="6" maxlength="64" required>
+          <button type="button" class="ikon-dugme kucuk" data-goster-h="h-sifre" aria-label="Şifreyi göster">${ikon('goz')}</button>
+        </div>
+        <small class="alan-ipucu">En az 6 karakter. Başka sitelerde kullandığınız bir şifreyi seçmeyin.</small>
+        <em class="alan-hata" data-hata="sifre"></em>
+      </div>
+      <div class="alan"><label for="h-sifre2">${ilk ? 'Şifre (tekrar)' : 'Yeni şifre (tekrar)'}</label>
+        <input id="h-sifre2" type="password" name="sifre2" autocomplete="new-password" required>
+        <em class="alan-hata" data-hata="sifre2"></em>
+      </div>
+    </form>`;
+  }
+
+  function sifreFormunuBagla(eposta, basarili) {
+    const f = $katman.querySelector('.sifre-formu');
+    f.kullanici.value = eposta || '';
+    $katman.querySelectorAll('[data-goster-h]').forEach(b => b.addEventListener('click', () => {
+      const g = byId(b.dataset.gosterH);
+      const gizli = g.type === 'password';
+      g.type = gizli ? 'text' : 'password';
+      b.innerHTML = ikon(gizli ? 'gozKapali' : 'goz');
+    }));
+    const gonder = async () => {
+      f.querySelectorAll('[data-hata]').forEach(e => { e.textContent = ''; });
+      const hatalar = {};
+      if (f.sifre.value.length < 6) hatalar.sifre = 'Şifre en az 6 karakter olmalıdır.';
+      else if (f.sifre.value !== f.sifre2.value) hatalar.sifre2 = 'Şifreler aynı değil.';
+      for (const [a, m] of Object.entries(hatalar)) { f.querySelector(`[data-hata="${a}"]`).textContent = m; f[a].focus(); }
+      if (Object.keys(hatalar).length) return;
+      const b = $katman.querySelector('[data-sifre-kaydet]'); b.disabled = true;
+      try { await Api.sifreBelirle(f.sifre.value); basarili(); }
+      catch (e) {
+        if (e.alanlar && e.alanlar.sifre) f.querySelector('[data-hata="sifre"]').textContent = e.alanlar.sifre;
+        hataGoster(e);
+      } finally { if (document.contains(b)) b.disabled = false; }
+    };
+    f.addEventListener('submit', ev => { ev.preventDefault(); gonder(); });
+    $katman.querySelector('[data-sifre-kaydet]').addEventListener('click', gonder);
+  }
+
+  // Kodla ilk girişten sonra bir kez gösterilir.
+  function sifreOnerisi() {
+    const anahtar = 'ofl-sifre-onerisi-' + S.oturum.id;
+    cekmeceAc({
+      etiket: 'Giriş şifresi belirleyin', orta: true,
+      bas: `<div><h2>Giriş şifresi belirleyin</h2><p class="soluk">Sonraki girişlerde e-posta kodu beklemeden, yalnızca şifrenizle girin.</p></div>`,
+      govde: `<div class="bilgi-kutu">${ikon('anahtar')}<span>E-posta adresiniz bu cihazda hatırlanır; giriş ekranında yalnızca şifreniz sorulur. Şifrenizi unutursanız her zaman e-posta koduyla girebilirsiniz.</span></div>
+        ${sifreFormu(true)}`,
+      alt: `<button class="dugme ikincil" data-sifre-sonra>Şimdi değil</button>
+        <button class="dugme" data-sifre-kaydet>${ikon('tamam')}<span>Şifreyi kaydet</span></button>`
+    });
+    yerelDepo(anahtar, 1);
+    sifreFormunuBagla((Api.hesap() || {}).eposta, () => { bildir('Şifreniz kaydedildi. Sonraki girişlerde şifrenizi kullanabilirsiniz.', 'basarili'); cekmeceKapat(); });
+    $katman.querySelector('[data-sifre-sonra]').addEventListener('click', () => {
+      bildir('İsterseniz daha sonra anahtar simgesinden şifre belirleyebilirsiniz.');
+      cekmeceKapat();
+    });
+  }
+
+  async function hesapAc() {
+    let h;
+    try { h = await Api.hesabim(); } catch (e) { return hataGoster(e); }
+    cekmeceAc({
+      etiket: 'Giriş ve şifre',
+      bas: `<div><h2>Giriş ve şifre</h2><p class="soluk">${esc(h.eposta)} · ${ROL_ADI[h.rol] || ''}</p></div>`,
+      govde: `
+        <div class="hesap-durum">
+          <div class="bilgi-satiri"><span class="bilgi-ikon">${ikon('anahtar')}</span><div class="bilgi-govde">
+            <span class="bilgi-etiket">Giriş şifresi</span>
+            <span class="bilgi-deger">${h.sifreVar ? 'Tanımlı — şifrenizle giriş yapabilirsiniz.' : 'Tanımlı değil — her girişte e-posta kodu gerekir.'}</span></div>
+            ${h.sifreVar ? `<span class="durum-cip yesil">${ikon('tamam', 'kucuk')}Etkin</span>` : `<span class="durum-cip gri">Yok</span>`}</div>
+          <div class="bilgi-satiri"><span class="bilgi-ikon">${ikon('yukle')}</span><div class="bilgi-govde">
+            <span class="bilgi-etiket">Bu cihaz</span>
+            <span class="bilgi-deger">${KURULU() ? 'Uygulama olarak yüklü.' : 'Tarayıcıdan kullanılıyor.'} Oturumu kapatmak için çıkış simgesini kullanın.</span></div></div>
+        </div>
+        <h3 class="bolum-baslik">${h.sifreVar ? 'Şifreyi değiştir' : 'Şifre belirle'}</h3>
+        ${sifreFormu(!h.sifreVar)}
+        <p class="not">${ikon('bilgi', 'kucuk')} Şifrenizi unutursanız giriş ekranındaki “e-posta koduyla gir” bağlantısını kullanın; ardından buradan yeni şifre belirleyebilirsiniz.</p>`,
+      alt: `<button class="dugme" data-sifre-kaydet>${ikon('tamam')}<span>${h.sifreVar ? 'Şifreyi değiştir' : 'Şifreyi kaydet'}</span></button>`
+    });
+    sifreFormunuBagla(h.eposta, () => { bildir(h.sifreVar ? 'Şifreniz değiştirildi.' : 'Şifreniz kaydedildi.', 'basarili'); cekmeceKapat(); });
   }
 
   /* =====================================================================
@@ -371,11 +575,43 @@
     </div>`;
   }
 
+  const BRANSLAR = ['Matematik', 'Fizik', 'Kimya', 'Biyoloji', 'Türk Dili ve Edebiyatı', 'Tarih', 'Coğrafya', 'Felsefe',
+    'İngilizce', 'Almanca', 'Bilişim Teknolojileri', 'Beden Eğitimi', 'Görsel Sanatlar', 'Müzik', 'Din Kültürü ve Ahlak Bilgisi', 'Rehberlik', 'Okul İdaresi'];
+
   function profilFormu(k, mod) {
     const on = 'f' + mod;
     k = k || { gorunurluk: { egitim: true, meslek: true, sehir: true, telefon: false, eposta: true } };
     const g = k.gorunurluk || {};
-    const dugmeYazisi = { kayit: 'Başvurumu gönder', yeni: 'Mezunu ekle', profil: 'Değişiklikleri kaydet', admin: 'Kaydet' }[mod];
+    const tur = k.tur === 'ogretmen' ? 'ogretmen' : 'mezun';
+    const dugmeYazisi = { kayit: 'Başvurumu gönder', yeni: 'Kullanıcıyı ekle', profil: 'Değişiklikleri kaydet', admin: 'Kaydet' }[mod];
+    const kim = (mezunYazi, ogretmenYazi) => mod === 'yeni'
+      ? `<span class="sadece-mezun">${mezunYazi}</span><span class="sadece-ogretmen">${ogretmenYazi}</span>`
+      : (tur === 'ogretmen' ? ogretmenYazi : mezunYazi);
+
+    const turSecimi = mod === 'yeni' ? `
+      <fieldset class="form-bolum">
+        <legend>Kullanıcı türü</legend>
+        <div class="segment" role="radiogroup" aria-label="Kullanıcı türü">
+          <label><input type="radio" name="tur" value="mezun" checked><span>${ikon('kep', 'kucuk')} Mezun</span></label>
+          <label><input type="radio" name="tur" value="ogretmen"><span>${ikon('ogretmen', 'kucuk')} Öğretmen</span></label>
+        </div>
+        <p class="bolum-not">${kim(
+          `${ikon('bilgi', 'kucuk')} Yöneticinin eklediği mezun doğrudan onaylanır. Mezunun açık rızasını ayrıca almayı unutmayın.`,
+          `${ikon('bilgi', 'kucuk')} Öğretmenler rehberde “Öğretmen” etiketiyle görünür ve mezunlarla aynı haklara sahiptir: rehberi görür, duyuruları alır, yalnızca kendi bilgisini düzenler.`)}</p>
+      </fieldset>` : '';
+
+    const yetki = mod === 'yeni' ? `
+      <fieldset class="form-bolum">
+        <legend>Yetki ve bildirim</legend>
+        <label class="onay-kutusu sadece-ogretmen">
+          <input type="checkbox" name="yonetici">
+          <span><strong>Yönetici yetkisi ver</strong><small>Bu öğretmen yönetim paneline erişir; başvuruları onaylayabilir, kullanıcı ekleyebilir ve duyuru yapabilir. Rehberde yine öğretmen olarak görünür.</small></span>
+        </label>
+        <label class="onay-kutusu">
+          <input type="checkbox" name="bilgilendir" checked>
+          <span><strong>Bilgilendirme e-postası gönder</strong><small>Kişiye sisteme eklendiğini ve nasıl giriş yapacağını anlatan kısa bir e-posta gider.</small></span>
+        </label>
+      </fieldset>` : '';
 
     const kvkk = mod === 'kayit' ? `
       <fieldset class="form-bolum">
@@ -400,15 +636,17 @@
       </fieldset>` : '';
 
     return `
-      <form class="form profil-formu" novalidate>
+      <form class="form profil-formu" data-tur="${tur}" novalidate>
         <input type="text" name="web" class="tuzak" tabindex="-1" autocomplete="off" aria-hidden="true">
+        ${turSecimi}
         <fieldset class="form-bolum">
           <legend>Kimlik bilgileri</legend>
-          <p class="bolum-not">${ikon('bilgi', 'kucuk')} Ad, soyad ve mezuniyet yılı rehberde tüm mezunlara görünür.</p>
+          <p class="bolum-not">${ikon('bilgi', 'kucuk')} ${kim('Ad, soyad ve mezuniyet yılı', 'Ad, soyad ve branş')} rehberde tüm kullanıcılara görünür.</p>
           <div class="alan-izgara">
             ${girdi(on, 'ad', 'Ad', k.ad, { zorunlu: true, ozellik: 'autocomplete="given-name"' })}
             ${girdi(on, 'soyad', 'Soyad', k.soyad, { zorunlu: true, ozellik: 'autocomplete="family-name"' })}
-            ${girdi(on, 'yil', 'Mezuniyet yılı', '', { zorunlu: true, secim: yilSecenekleri(k.yil) })}
+            ${girdi(on, 'yil', 'Mezuniyet yılı', '', { zorunlu: true, secim: yilSecenekleri(k.yil), sinif: 'sadece-mezun' })}
+            ${girdi(on, 'brans', 'Branş', k.brans, { zorunlu: true, sinif: 'sadece-ogretmen', ozellik: 'list="brans-listesi" placeholder="Örn. Kimya"' })}
           </div>
         </fieldset>
 
@@ -431,31 +669,36 @@
           </div>
         </fieldset>
         ${kvkk}
+        ${yetki}
         <div class="form-alt">
           <button class="dugme buyuk" type="submit">${dugmeYazisi}</button>
         </div>
       </form>
-      <datalist id="uni-listesi">${['Hacettepe Üniversitesi', 'Orta Doğu Teknik Üniversitesi', 'Ankara Üniversitesi', 'Gazi Üniversitesi', 'Bilkent Üniversitesi', 'Boğaziçi Üniversitesi', 'İstanbul Teknik Üniversitesi', 'İstanbul Üniversitesi', 'Yıldız Teknik Üniversitesi', 'Marmara Üniversitesi', 'Çukurova Üniversitesi', 'Osmaniye Korkut Ata Üniversitesi', 'Gaziantep Üniversitesi', 'Mersin Üniversitesi', 'Ege Üniversitesi', 'Dokuz Eylül Üniversitesi', 'Erciyes Üniversitesi', 'Selçuk Üniversitesi'].map(u => `<option value="${u}">`).join('')}</datalist>`;
+      <datalist id="uni-listesi">${['Hacettepe Üniversitesi', 'Orta Doğu Teknik Üniversitesi', 'Ankara Üniversitesi', 'Gazi Üniversitesi', 'Bilkent Üniversitesi', 'Boğaziçi Üniversitesi', 'İstanbul Teknik Üniversitesi', 'İstanbul Üniversitesi', 'Yıldız Teknik Üniversitesi', 'Marmara Üniversitesi', 'Çukurova Üniversitesi', 'Osmaniye Korkut Ata Üniversitesi', 'Gaziantep Üniversitesi', 'Mersin Üniversitesi', 'Ege Üniversitesi', 'Dokuz Eylül Üniversitesi', 'Erciyes Üniversitesi', 'Selçuk Üniversitesi'].map(u => `<option value="${u}">`).join('')}</datalist>
+      <datalist id="brans-listesi">${BRANSLAR.map(b => `<option value="${b}">`).join('')}</datalist>`;
   }
 
   function formVerisi(f) {
     const v = {};
-    for (const n of ['ad', 'soyad', 'yil', 'universite', 'bolum', 'meslek', 'sehir', 'telefon', 'eposta', 'web']) v[n] = f.elements[n].value;
+    for (const n of ['ad', 'soyad', 'yil', 'brans', 'universite', 'bolum', 'meslek', 'sehir', 'telefon', 'eposta', 'web']) v[n] = f.elements[n].value;
     v.gorunurluk = {};
     for (const a of OFL.ALANLAR) v.gorunurluk[a] = f.elements['g_' + a].checked;
     if (f.elements.kvkkOnay) v.kvkkOnay = f.elements.kvkkOnay.checked;
+    if (f.elements.tur) v.tur = f.elements.tur.value;
+    if (f.elements.yonetici) v.yonetici = v.tur === 'ogretmen' && f.elements.yonetici.checked;
+    if (f.elements.bilgilendir) v.bilgilendir = f.elements.bilgilendir.checked;
     return v;
   }
 
-  function formuBagla(f, gonder) {
+  function formuBagla(f, gonder, topla) {
     f.addEventListener('submit', async ev => {
       ev.preventDefault();
       f.querySelectorAll('[data-hata]').forEach(e => { e.textContent = ''; });
       f.querySelectorAll('[aria-invalid]').forEach(e => e.removeAttribute('aria-invalid'));
-      const b = f.querySelector('button[type=submit]');
-      const yazi = b.textContent;
+      const b = f.querySelector('button[type=submit]') || document.querySelector(`button[form="${f.id}"]`);
+      const yazi = b.innerHTML;
       b.disabled = true; b.textContent = 'Kaydediliyor…';
-      try { await gonder(formVerisi(f)); }
+      try { await gonder((topla || formVerisi)(f)); }
       catch (e) {
         if (e.alanlar) {
           let ilk = null;
@@ -468,7 +711,7 @@
           if (ilk) ilk.focus();
         }
         hataGoster(e);
-      } finally { if (document.contains(b)) { b.disabled = false; b.textContent = yazi; } }
+      } finally { if (document.contains(b)) { b.disabled = false; b.innerHTML = yazi; } }
     });
   }
 
@@ -510,18 +753,24 @@
   async function rehberEkrani() {
     const admin = S.oturum.rol === 'admin';
     const ic = byId('icerik');
-    ic.innerHTML = sayfaBasi('Mezun Rehberi', 'Mezunlar yükleniyor…') + yukleniyor();
+    ic.innerHTML = sayfaBasi('Rehber', 'Kayıtlar yükleniyor…') + yukleniyor();
     S.liste = await Api.rehber();
     const sehirler = [...new Set(S.liste.map(k => k.sehir).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
-    const yillar = [...new Set(S.liste.map(k => k.yil))].sort((a, b) => b - a);
+    const yillar = [...new Set(S.liste.filter(k => !ogretmen(k)).map(k => k.yil))].sort((a, b) => b - a);
+    const ogretmenSayisi = S.liste.filter(ogretmen).length;
     const f = S.filtre;
     ic.innerHTML = `
-      ${sayfaBasi('Mezun Rehberi', `${sayi(S.liste.length)} kayıtlı mezun`,
-        admin ? `<button class="dugme" data-ac="yeni">${ikon('arti')}<span>Mezun ekle</span></button>` : '')}
+      ${sayfaBasi('Rehber', `${sayi(S.liste.length - ogretmenSayisi)} mezun${ogretmenSayisi ? ` · ${sayi(ogretmenSayisi)} öğretmen` : ''}`,
+        admin ? `<button class="dugme" data-ac="yeni">${ikon('kisiEkle')}<span>Kullanıcı ekle</span></button>` : '')}
       <div class="arac-cubugu">
         <label class="arama">${ikon('ara')}<span class="gorunmez">Ara</span>
-          <input type="search" id="q" value="${esc(f.q)}" placeholder="İsim, meslek, üniversite, bölüm veya şehir ara" autocomplete="off">
+          <input type="search" id="q" value="${esc(f.q)}" placeholder="İsim, meslek, branş, üniversite veya şehir ara" autocomplete="off">
         </label>
+        <label class="secim"><span class="gorunmez">Tür</span><select id="f-tur">
+          <option value="">Herkes</option>
+          <option value="mezun" ${f.tur === 'mezun' ? 'selected' : ''}>Mezunlar</option>
+          <option value="ogretmen" ${f.tur === 'ogretmen' ? 'selected' : ''}>Öğretmenler</option>
+        </select></label>
         <label class="secim"><span class="gorunmez">Mezuniyet yılı</span><select id="f-yil"><option value="">Tüm yıllar</option>${yillar.map(y => `<option ${+f.yil === y ? 'selected' : ''}>${y}</option>`).join('')}</select></label>
         <label class="secim"><span class="gorunmez">Şehir</span><select id="f-sehir"><option value="">Tüm şehirler</option>${sehirler.map(s => `<option ${f.sehir === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
         <label class="secim"><span class="gorunmez">Sıralama</span><select id="f-sirala">
@@ -534,7 +783,7 @@
       <div class="tablo-kart">
         <table class="tablo rehber-tablo">
           <thead><tr>
-            <th scope="col">Mezun</th><th scope="col" class="h-yil">Yıl</th><th scope="col" class="h-egitim">Üniversite / Bölüm</th>
+            <th scope="col">Kişi</th><th scope="col" class="h-yil">Yıl / Branş</th><th scope="col" class="h-egitim">Üniversite / Bölüm</th>
             <th scope="col" class="h-meslek">Meslek</th><th scope="col" class="h-sehir">Şehir</th><th scope="col" class="h-iletisim">İletişim</th>
           </tr></thead>
           <tbody id="liste"></tbody>
@@ -549,7 +798,7 @@
       zamanlayici = setTimeout(() => { f.q = q.value; S.sayfa = 1; listeyiCiz(); }, 150);
     });
     const secim = (id, ad) => byId(id).addEventListener('change', ev => { f[ad] = ev.target.value; S.sayfa = 1; listeyiCiz(); });
-    secim('f-yil', 'yil'); secim('f-sehir', 'sehir'); secim('f-sirala', 'sirala');
+    secim('f-tur', 'tur'); secim('f-yil', 'yil'); secim('f-sehir', 'sehir'); secim('f-sirala', 'sirala');
     listeyiCiz();
   }
 
@@ -557,16 +806,19 @@
     const f = S.filtre;
     const kelimeler = OFL.katla(f.q).split(/\s+/).filter(Boolean);
     const l = S.liste.filter(k => {
+      if (f.tur && k.tur !== f.tur) return false;
       if (f.yil && k.yil !== +f.yil) return false;
       if (f.sehir && k.sehir !== f.sehir) return false;
       if (!kelimeler.length) return true;
-      const metin = OFL.katla([k.ad, k.soyad, k.meslek, k.universite, k.bolum, k.sehir, k.yil].join(' '));
+      const metin = OFL.katla([k.ad, k.soyad, k.meslek, k.universite, k.bolum, k.sehir, k.yil || '', k.brans, ogretmen(k) ? 'öğretmen' : 'mezun'].join(' '));
       return kelimeler.every(w => metin.includes(w));
     });
     const adSirasi = (a, b) => adSoyad(a).localeCompare(adSoyad(b), 'tr');
     if (f.sirala === 'ad') l.sort(adSirasi);
-    else if (f.sirala === 'eski') l.sort((a, b) => a.yil - b.yil || adSirasi(a, b));
-    else l.sort((a, b) => b.yil - a.yil || adSirasi(a, b));
+    // Öğretmenlerin mezuniyet yılı yoktur; yıl sıralamalarında en üstte toplanırlar.
+    const yil = (k, bos) => ogretmen(k) ? bos : k.yil;
+    if (f.sirala === 'eski') l.sort((a, b) => yil(a, 0) - yil(b, 0) || adSirasi(a, b));
+    else if (f.sirala !== 'ad') l.sort((a, b) => yil(b, 1e4) - yil(a, 1e4) || adSirasi(a, b));
     return l;
   }
 
@@ -578,13 +830,15 @@
     const tel = telRakam(k.telefon);
     const iletisim = (tel ? `<a class="ikon-dugme kucuk" href="tel:+9${tel}" title="Ara: ${esc(k.telefon)}" aria-label="${esc(adSoyad(k))} kişisini ara">${ikon('telefon')}</a>` : '') +
       (k.eposta ? `<a class="ikon-dugme kucuk" href="mailto:${esc(k.eposta)}" title="${esc(k.eposta)}" aria-label="${esc(adSoyad(k))} kişisine e-posta gönder">${ikon('eposta')}</a>` : '');
-    const ozet = [k.meslek, k.sehir].filter(Boolean).join(' · ');
+    // Öğretmenin mesleği çoğunlukla branşını tekrarlar ("Fizik öğretmeni · Fizik Öğretmeni"); tekrar gösterilmez.
+    const meslek = ogretmen(k) && OFL.katla(k.meslek).includes('ogretmen') ? '' : k.meslek;
+    const ozet = [meslek, k.sehir].filter(Boolean).join(' · ');
     return `<tr data-ac="detay" data-id="${k.id}" tabindex="0">
       <td class="h-kisi"><div class="kisi">${avatar(k)}<div class="kisi-yazi">
-        <strong>${esc(adSoyad(k))}${k.kendisi ? ' <span class="etiket">Siz</span>' : ''}</strong>
-        <span class="mobil-ek">${k.yil} mezunu${ozet ? ' · ' + esc(ozet) : ''}</span>
+        <strong>${esc(adSoyad(k))}${k.kendisi ? ' <span class="etiket">Siz</span>' : ''}${ogretmen(k) ? ' <span class="etiket ogretmen-etiket mobil-goster">Öğretmen</span>' : ''}</strong>
+        <span class="mobil-ek">${esc(kimlikYazisi(k))}${ozet ? ' · ' + esc(ozet) : ''}</span>
       </div></div></td>
-      <td class="h-yil"><span class="yil">${k.yil}</span></td>
+      <td class="h-yil">${ogretmen(k) ? `<span class="ogretmen-hucre"><span class="etiket ogretmen-etiket">${ikon('ogretmen', 'kucuk')}Öğretmen</span><small>${esc(k.brans || '')}</small></span>` : `<span class="yil">${k.yil}</span>`}</td>
       <td class="h-egitim">${gizli('egitim') ? gizliHucre : (k.universite || k.bolum ? `<span class="iki-satir">${esc(k.universite || '—')}<small>${esc(k.bolum || '')}</small></span>` : '<span class="soluk">—</span>')}</td>
       <td class="h-meslek">${deger(k.meslek, gizli('meslek'))}</td>
       <td class="h-sehir">${deger(k.sehir, gizli('sehir'))}</td>
@@ -599,12 +853,12 @@
     const bas = (S.sayfa - 1) * SAYFA_BOYU;
     const gosterilen = l.slice(bas, bas + SAYFA_BOYU);
     const f = S.filtre;
-    byId('temizle').hidden = !(f.q || f.yil || f.sehir);
+    byId('temizle').hidden = !(f.q || f.tur || f.yil || f.sehir);
     byId('liste').innerHTML = gosterilen.length
       ? gosterilen.map(satirHtml).join('')
       : `<tr class="bos-satir"><td colspan="6">${bosDurum('ara', 'Sonuç bulunamadı', 'Arama ifadesini veya filtreleri değiştirmeyi deneyin.')}</td></tr>`;
     byId('sayfalama').innerHTML = l.length ? `
-      <span class="soluk">${sayi(bas + 1)}–${sayi(bas + gosterilen.length)} / ${sayi(l.length)} mezun${l.length !== S.liste.length ? ' (filtrelenmiş)' : ''}</span>
+      <span class="soluk">${sayi(bas + 1)}–${sayi(bas + gosterilen.length)} / ${sayi(l.length)} kişi${l.length !== S.liste.length ? ' (filtrelenmiş)' : ''}</span>
       ${toplamSayfa > 1 ? `<div class="sayfa-dugmeleri">
         <button class="dugme ikincil kucuk" data-ac="sayfa" data-yon="-1" ${S.sayfa === 1 ? 'disabled' : ''} aria-label="Önceki sayfa">${ikon('sol')}<span>Önceki</span></button>
         <span class="sayfa-no">Sayfa ${S.sayfa} / ${toplamSayfa}</span>
@@ -644,8 +898,8 @@
 
   function kisiBasligi(k, ek) {
     return `<div class="kisi-baslik">${avatar(k, 'buyuk')}<div>
-      <h2>${esc(adSoyad(k))}</h2>
-      <p class="soluk">${k.yil} mezunu${ek || ''}</p>
+      <h2>${esc(adSoyad(k))}${ogretmen(k) ? ' <span class="etiket ogretmen-etiket">Öğretmen</span>' : ''}</h2>
+      <p class="soluk">${esc(kimlikYazisi(k))}${ek || ''}</p>
     </div></div>`;
   }
 
@@ -662,7 +916,7 @@
     if (k.eposta) iletisim.push(`<a class="dugme ikincil" href="mailto:${esc(k.eposta)}">${ikon('eposta')}<span>E-posta</span></a>`);
 
     const notlar = [];
-    if (!admin && k.gizli.length) notlar.push(`${ikon('kilit', 'kucuk')} Bu mezun ${k.gizli.length} bilgisini yalnızca okul yönetimiyle paylaşıyor.`);
+    if (!admin && k.gizli.length) notlar.push(`${ikon('kilit', 'kucuk')} ${ogretmen(k) ? 'Bu öğretmen' : 'Bu mezun'} ${k.gizli.length} bilgisini yalnızca okul yönetimiyle paylaşıyor.`);
     if (admin) notlar.push(`${ikon('takvim', 'kucuk')} Son güncelleme: ${tarihYaz(k.guncelleme)}`);
     if (admin && k.silmeTalebi) notlar.push(`${ikon('cop', 'kucuk')} ${tarihYaz(k.silmeTalebi)} tarihinde verilerinin silinmesini talep etti.`);
 
@@ -686,7 +940,7 @@
     try { k = await Api.mezun(id); } catch (e) { return hataGoster(e); }
     cekmeceAc({
       etiket: 'Mezunu düzenle', genis: true,
-      bas: `<div><h2>Bilgileri düzenle</h2><p class="soluk">${esc(adSoyad(k))} · ${k.yil} mezunu</p></div>`,
+      bas: `<div><h2>Bilgileri düzenle</h2><p class="soluk">${esc(adSoyad(k))} · ${esc(kimlikYazisi(k))}</p></div>`,
       govde: profilFormu(k, 'admin')
     });
     formuBagla($katman.querySelector('form'), async v => {
@@ -696,15 +950,22 @@
     });
   }
 
-  function yeniMezun() {
+  function kullaniciEkle() {
     cekmeceAc({
-      etiket: 'Yeni mezun', genis: true,
-      bas: `<div><h2>Yeni mezun ekle</h2><p class="soluk">Yöneticinin eklediği kayıtlar doğrudan onaylanır. Mezunun açık rızasını ayrıca almayı unutmayın.</p></div>`,
+      etiket: 'Kullanıcı ekle', genis: true,
+      bas: `<div><h2>Kullanıcı ekle</h2><p class="soluk">Mezun veya öğretmen ekleyin. Eklenen kişi onay beklemeden e-postasıyla giriş yapabilir.</p></div>`,
       govde: profilFormu(null, 'yeni')
     });
-    formuBagla($katman.querySelector('form'), async v => {
-      await Api.kayitOl(v);
-      bildir('Mezun eklendi.', 'basarili');
+    const f = $katman.querySelector('form');
+    f.querySelectorAll('input[name="tur"]').forEach(r => r.addEventListener('change', () => {
+      f.dataset.tur = f.elements.tur.value;
+      // Öğretmenler okulun "mezunu" olmadığından meslek alanı varsayılan olarak doldurulur.
+      if (f.elements.tur.value === 'ogretmen' && !f.elements.meslek.value) f.elements.meslek.placeholder = 'Örn. Kimya Öğretmeni';
+    }));
+    formuBagla(f, async v => {
+      const r = await Api.kullaniciEkle(v);
+      const kim = v.tur === 'ogretmen' ? 'Öğretmen' : 'Mezun';
+      bildir(`${kim} eklendi${r.yonetici ? ' ve yönetici yetkisi verildi' : ''}${r.bilgilendirildi ? '; bilgilendirme e-postası gönderildi' : ''}.`, 'basarili');
       yonlendir();
     });
   }
@@ -731,11 +992,11 @@
           <div class="kart profil-kart">
             ${avatar(k, 'cok-buyuk')}
             <h2>${esc(adSoyad(k))}</h2>
-            <p class="soluk">${k.yil} mezunu</p>
+            <p class="soluk">${esc(kimlikYazisi(k))}</p>
             <p class="profil-guncelleme">${ikon('takvim', 'kucuk')} Son güncelleme: ${tarihYaz(k.guncelleme)}</p>
           </div>
           <div class="kart">
-            <h3>Diğer mezunlar ne görüyor?</h3>
+            <h3>Diğer kullanıcılar ne görüyor?</h3>
             <p class="soluk kucuk-yazi">${OFL.ALANLAR.length} bilginizden ${gorunen} tanesi görünür.</p>
             <ul class="gorunurluk-ozeti">
               ${OFL.ALANLAR.map(a => `<li><span>${ALAN_ADI[a]}</span>${k.gorunurluk[a]
@@ -744,8 +1005,13 @@
             </ul>
           </div>
           <div class="kart">
+            <h3>Giriş ve şifre</h3>
+            <p class="soluk kucuk-yazi">Bir giriş şifresi belirlerseniz e-posta kodu beklemeden yalnızca şifrenizle girebilirsiniz.</p>
+            <button class="dugme ikincil genis" data-ac="hesap">${ikon('anahtar')}<span>Şifre ayarları</span></button>
+          </div>
+          <div class="kart">
             <h3>Verilerim (KVKK)</h3>
-            <p class="soluk kucuk-yazi">Açık rıza tarihi: ${tarihYaz(k.kvkkOnay || k.kayitTarihi)}</p>
+            <p class="soluk kucuk-yazi">${k.kvkkOnay ? 'Açık rıza tarihi: ' + tarihYaz(k.kvkkOnay) : 'Kayıt tarihi: ' + tarihYaz(k.kayitTarihi)}</p>
             ${k.silmeTalebi
               ? `<p class="uyari">${tarihYaz(k.silmeTalebi)} tarihinde silme talebi gönderdiniz. Talebiniz okul yönetimi tarafından işleme alınacak.</p>
                  <button class="dugme ikincil genis" data-ac="silme-talebi">Talebimi geri al</button>`
@@ -880,13 +1146,280 @@
   }
 
   /* =====================================================================
+   * Duyurular
+   * ===================================================================== */
+
+  const DUYURU_TURU = {
+    bilgi: { ad: 'Bilgi', ikon: 'bilgi', sinif: 'mavi' },
+    etkinlik: { ad: 'Etkinlik', ikon: 'takvim', sinif: 'yesil' },
+    onemli: { ad: 'Önemli', ikon: 'duyuru', sinif: 'kirmizi' }
+  };
+  const HEDEF_ADI = { herkes: 'Herkes', mezun: 'Yalnızca mezunlar', ogretmen: 'Yalnızca öğretmenler' };
+  const DURUM_ADI = { aktif: ['Yayında', 'yesil'], planli: ['Planlandı', 'turuncu'], bitti: ['Süresi doldu', 'gri'] };
+
+  // Görülen duyurular cihazda kişi başına tutulur; bildirim penceresi her duyuru için yalnızca bir kez açılır.
+  const gorulenAnahtari = () => 'ofl-duyuru-gorulen-' + S.oturum.id;
+  const gorulenler = () => yerelDepo(gorulenAnahtari()) || [];
+  function gorulduIsaretle(liste) {
+    const aktif = new Set((S.duyurular || []).map(d => d.id));
+    const yeni = [...new Set(gorulenler().filter(id => aktif.has(id)).concat(liste.map(d => d.id)))];
+    yerelDepo(gorulenAnahtari(), yeni);
+    duyuruRozetiniGuncelle();
+  }
+  const gorulmemis = () => { const g = new Set(gorulenler()); return (S.duyurular || []).filter(d => !g.has(d.id)); };
+
+  function duyuruRozetiniGuncelle() {
+    if (!S.oturum || S.oturum.rol === 'admin' || !S.duyurular) return;
+    const n = gorulmemis().length;
+    document.querySelectorAll('[data-duyuru-rozet]').forEach(el => { el.textContent = n; el.hidden = !n; });
+  }
+
+  async function duyuruKontrol() {
+    try { S.duyurular = await Api.duyurular(); } catch (e) { return; }
+    if (location.hash.replace(/^#\/?/, '') === 'duyurular') return gorulduIsaretle(S.duyurular);
+    const yeni = gorulmemis();
+    duyuruRozetiniGuncelle();
+    if (!yeni.length || $katman.classList.contains('acik')) return;
+    const gosterilen = yeni.slice(0, 3);
+    cekmeceAc({
+      etiket: 'Yeni duyuru', orta: true,
+      bas: `<div><span class="ust-etiket">${ikon('duyuru', 'kucuk')} ${yeni.length === 1 ? 'Yeni duyuru' : yeni.length + ' yeni duyuru'}</span>
+        <h2>${yeni.length === 1 ? esc(yeni[0].baslik) : 'Okul yönetiminden duyurular'}</h2></div>`,
+      govde: `<div class="duyuru-listesi">${gosterilen.map(d => duyuruKarti(d, { sade: yeni.length === 1 })).join('')}</div>` +
+        (yeni.length > 3 ? `<p class="not">${ikon('bilgi', 'kucuk')} ${yeni.length - 3} duyuru daha var. Tümünü Duyurular sayfasında görebilirsiniz.</p>` : ''),
+      alt: `<a class="dugme ikincil" href="#/duyurular">Tüm duyurular</a><button class="dugme" data-ac="kapat">Tamam</button>`
+    });
+    gorulduIsaretle(yeni);
+  }
+
+  async function acilisIslemleri() {
+    const uye = S.oturum.rol !== 'admin';
+    if (S.sifreOner) {
+      S.sifreOner = false;
+      if (uye) S.kapaninca = duyuruKontrol;
+      return sifreOnerisi();
+    }
+    if (uye) duyuruKontrol();
+  }
+
+  function duyuruMetni(m) {
+    const bag = u => {
+      const son = (u.match(/[.,;:!?)]+$/) || [''])[0];
+      const adr = u.slice(0, u.length - son.length);
+      return `<a href="${adr}" target="_blank" rel="noopener">${adr}</a>${son}`;
+    };
+    return String(m || '').split(/\n{2,}/).map(p =>
+      `<p>${esc(p).replace(/https?:\/\/[^\s<]+/g, bag).replace(/\n/g, '<br>')}</p>`).join('');
+  }
+
+  function epostaDurumuYazisi(d) {
+    if (!d.eposta) return '';
+    const q = d.epostaDurumu;
+    if (!q || !q.toplam) return 'E-posta: alıcı bulunamadı';
+    if (!q.bekleyen) return `E-posta ${sayi(q.gonderilen)} kişiye gönderildi`;
+    if (d.durum === 'planli') return `E-posta yayın başlayınca ${sayi(q.toplam)} kişiye gönderilecek`;
+    return `E-posta ${sayi(q.gonderilen)} / ${sayi(q.toplam)} kişiye gönderildi · kalanlar günlük kota nedeniyle sırayla gidiyor`;
+  }
+
+  function duyuruKarti(d, ek) {
+    ek = ek || {};
+    const t = DUYURU_TURU[d.tur] || DUYURU_TURU.bilgi;
+    const durum = DURUM_ADI[d.durum];
+    const ust = [
+      `<span class="durum-cip ${t.sinif}">${ikon(t.ikon, 'kucuk')}${t.ad}</span>`,
+      ek.yeni ? '<span class="etiket">Yeni</span>' : '',
+      ek.admin && durum ? `<span class="durum-cip ${durum[1]}">${durum[0]}</span>` : '',
+      ek.admin ? `<span class="durum-cip gri">${ikon('kisiler', 'kucuk')}${HEDEF_ADI[d.hedef] || 'Herkes'}</span>` : ''
+    ].join('');
+    const eposta = ek.admin ? epostaDurumuYazisi(d) : '';
+    return `<article class="duyuru-kart tur-${esc(d.tur)}">
+      <div class="duyuru-ust">${ust}</div>
+      ${ek.sade ? '' : `<h3>${esc(d.baslik)}</h3>`}
+      <div class="duyuru-metin">${duyuruMetni(d.metin)}</div>
+      ${d.baglantiUrl ? `<a class="dugme ikincil kucuk" href="${esc(d.baglantiUrl)}" target="_blank" rel="noopener"><span>${esc(d.baglantiMetni || 'Ayrıntılar')}</span>${ikon('dis')}</a>` : ''}
+      <div class="duyuru-alt">
+        <span>${ikon('takvim', 'kucuk')} ${tarihYaz(d.baslangic)}</span>
+        <span>${ikon('saat', 'kucuk')} Son gün: ${tarihYaz(d.bitis)}</span>
+        ${eposta ? `<span>${ikon('eposta', 'kucuk')} ${eposta}</span>` : ''}
+        ${ek.admin ? `<span class="duyuru-eylem">
+          <button class="dugme ikincil kucuk" data-ac="duyuru-duzenle" data-id="${esc(d.id)}">${ikon('kalem')}<span>Düzenle</span></button>
+          <button class="dugme tehlike-cerceve kucuk" data-ac="duyuru-sil" data-id="${esc(d.id)}">${ikon('cop')}<span>Sil</span></button></span>` : ''}
+      </div>
+    </article>`;
+  }
+
+  async function duyurularEkrani() {
+    const admin = S.oturum.rol === 'admin';
+    const ic = byId('icerik');
+    const alt = admin ? 'Duyuru hazırlayın, yayın süresini belirleyin, önemli olanları e-postayla da gönderin.' : 'Okul yönetiminden güncel duyurular';
+    ic.innerHTML = sayfaBasi('Duyurular', alt) + yukleniyor();
+    const liste = await Api.duyurular();
+
+    if (!admin) {
+      S.duyurular = liste;
+      const onceki = new Set(gorulenler());
+      ic.innerHTML = sayfaBasi('Duyurular', alt) + (liste.length
+        ? `<div class="duyuru-listesi">${liste.map(d => duyuruKarti(d, { yeni: !onceki.has(d.id) })).join('')}</div>`
+        : `<div class="kart">${bosDurum('duyuru', 'Şu anda yayında duyuru yok', 'Yeni duyurular yayınlandığında burada görünür.')}</div>`);
+      gorulduIsaretle(liste);
+      return;
+    }
+
+    const gruplar = { aktif: [], planli: [], bitti: [] };
+    liste.forEach(d => (gruplar[d.durum] || gruplar.bitti).push(d));
+    gruplar.planli.sort((a, b) => String(a.baslangic).localeCompare(String(b.baslangic)));
+    gruplar.bitti.sort((a, b) => String(b.bitis).localeCompare(String(a.bitis)));
+    const sekme = S.duyuruSekmesi in gruplar ? S.duyuruSekmesi : 'aktif';
+    const sekmeDugmesi = (ad, yazi) => `<button role="tab" class="sekme ${sekme === ad ? 'aktif' : ''}" aria-selected="${sekme === ad}" data-ac="duyuru-sekme" data-sekme="${ad}">${yazi} <span class="sayac">${gruplar[ad].length}</span></button>`;
+    const bos = {
+      aktif: bosDurum('duyuru', 'Yayında duyuru yok', 'Yeni bir duyuru hazırlayarak mezunlara ve öğretmenlere ulaşın.'),
+      planli: bosDurum('takvim', 'Planlanmış duyuru yok', 'Başlangıcı ileri bir tarihe ayarlanan duyurular burada bekler.'),
+      bitti: bosDurum('saat', 'Süresi dolan duyuru yok', 'Bitiş tarihi geçen duyurular kullanıcıların ekranından otomatik kaldırılır ve burada arşivlenir.')
+    }[sekme];
+
+    ic.innerHTML = `
+      ${sayfaBasi('Duyurular', alt, `<button class="dugme" data-ac="duyuru-yeni">${ikon('arti')}<span>Yeni duyuru</span></button>`)}
+      <div class="sekmeler" role="tablist">
+        ${sekmeDugmesi('aktif', 'Yayında')}${sekmeDugmesi('planli', 'Planlanan')}${sekmeDugmesi('bitti', 'Süresi dolan')}
+      </div>
+      ${gruplar[sekme].length
+        ? `<div class="duyuru-listesi">${gruplar[sekme].map(d => duyuruKarti(d, { admin: true })).join('')}</div>`
+        : `<div class="kart">${bos}</div>`}
+      ${sekme === 'bitti' && gruplar.bitti.length ? `<p class="not">${ikon('bilgi', 'kucuk')} Bu duyurular kullanıcıların ekranından otomatik kaldırıldı; yalnızca siz görüyorsunuz. Bitiş tarihini ileri alarak yeniden yayınlayabilirsiniz.</p>` : ''}`;
+  }
+
+  async function duyuruEditoru(id) {
+    let d = null;
+    if (id) {
+      try { d = (await Api.duyurular()).find(x => x.id === id); } catch (e) { return hataGoster(e); }
+      if (!d) return bildir('Duyuru bulunamadı.', 'hata');
+    }
+    const simdi = new Date();
+    const bas = d ? new Date(d.baslangic) : simdi;
+    const bit = d ? new Date(d.bitis) : new Date(simdi.getTime() + 7 * 864e5);
+    const tur = d ? d.tur : 'bilgi';
+    const hedef = d ? d.hedef : 'herkes';
+    const epostaGitti = d && d.eposta;
+    const radyo = (ad, deger, secili, yazi) => `<label><input type="radio" name="${ad}" value="${deger}" ${secili === deger ? 'checked' : ''}><span>${yazi}</span></label>`;
+    const hata = ad => `<em class="alan-hata" data-hata="${ad}"></em>`;
+
+    cekmeceAc({
+      etiket: d ? 'Duyuruyu düzenle' : 'Yeni duyuru', genis: true,
+      bas: `<div><h2>${d ? 'Duyuruyu düzenle' : 'Yeni duyuru'}</h2><p class="soluk">Duyuru, yayın aralığında mezunlara ve öğretmenlere gösterilir; süresi dolunca otomatik kaldırılır.</p></div>`,
+      govde: `<div class="duyuru-duzen">
+        <form class="form duyuru-formu" id="duyuru-formu" novalidate>
+          <fieldset class="form-bolum">
+            <legend>İçerik</legend>
+            <div class="alan"><label>Tür</label>
+              <div class="segment">${Object.entries(DUYURU_TURU).map(([k, t]) => radyo('tur', k, tur, ikon(t.ikon, 'kucuk') + ' ' + t.ad)).join('')}</div>
+            </div>
+            <div class="alan"><label for="d-baslik">Başlık <span class="zorunlu" aria-hidden="true">*</span></label>
+              <input id="d-baslik" name="baslik" maxlength="120" value="${esc(d ? d.baslik : '')}" placeholder="Örn. Mezunlar Buluşması 2026" required>${hata('baslik')}</div>
+            <div class="alan"><label for="d-metin">Duyuru metni <span class="zorunlu" aria-hidden="true">*</span></label>
+              <textarea id="d-metin" name="metin" rows="7" maxlength="4000" placeholder="Duyurunuzu yazın. Boş bir satır yeni paragraf başlatır; web adresleri tıklanabilir olur." required>${esc(d ? d.metin : '')}</textarea>
+              <small class="alan-ipucu"><span data-sayac>0</span> / 4000 karakter</small>${hata('metin')}</div>
+            <div class="alan-izgara">
+              <div class="alan"><label for="d-url">Bağlantı <span class="soluk">(isteğe bağlı)</span></label>
+                <input id="d-url" name="baglantiUrl" type="url" inputmode="url" value="${esc(d ? d.baglantiUrl : '')}" placeholder="https://…">${hata('baglantiUrl')}</div>
+              <div class="alan"><label for="d-url-metin">Bağlantı düğmesinin yazısı</label>
+                <input id="d-url-metin" name="baglantiMetni" maxlength="40" value="${esc(d ? d.baglantiMetni : '')}" placeholder="Örn. Katılım formu"></div>
+            </div>
+          </fieldset>
+          <fieldset class="form-bolum">
+            <legend>Kime ve ne zaman</legend>
+            <div class="alan"><label>Hedef kitle</label>
+              <div class="segment">${Object.entries(HEDEF_ADI).map(([k, a]) => radyo('hedef', k, hedef, a)).join('')}</div>
+            </div>
+            <div class="alan-izgara">
+              <div class="alan"><label for="d-bas">Yayın başlangıcı</label>
+                <input id="d-bas" name="baslangic" type="datetime-local" value="${yerelGirdi(bas)}" required>${hata('baslangic')}</div>
+              <div class="alan"><label for="d-bit">Yayın bitişi</label>
+                <input id="d-bit" name="bitis" type="datetime-local" value="${yerelGirdi(bit)}" required>${hata('bitis')}</div>
+            </div>
+            <div class="sure-cipleri" role="group" aria-label="Geçerlilik süresi">
+              <span class="soluk kucuk-yazi">Geçerlilik süresi:</span>
+              ${[[1, '1 gün'], [3, '3 gün'], [7, '1 hafta'], [14, '2 hafta'], [30, '1 ay'], [90, '3 ay']].map(([g, y]) => `<button type="button" class="cip" data-sure="${g}">${y}</button>`).join('')}
+            </div>
+            <p class="alan-ipucu" data-sure-ozet></p>
+          </fieldset>
+          <fieldset class="form-bolum">
+            <legend>E-posta</legend>
+            <label class="onay-kutusu">
+              <input type="checkbox" name="eposta" ${epostaGitti ? 'checked disabled' : ''}>
+              <span><strong>${epostaGitti ? 'E-posta gönderimi başlatıldı' : 'Önemli: e-postayla da gönder'}</strong>
+                <small>${epostaGitti ? esc(epostaDurumuYazisi(d)) + '.' : 'Duyuru, hedef kitledeki herkesin e-posta adresine de gider.'}
+                Ücretsiz Google hesabı günde yaklaşık 100 e-posta gönderebilir; e-postalar 45 kişilik gruplar halinde gizli alıcı (BCC) olarak gider, kota dolarsa kalanlar ertesi gün otomatik gönderilir. Yayın ileri bir tarihteyse e-posta yayın başlayınca gider.</small></span>
+            </label>
+          </fieldset>
+        </form>
+        <aside class="duyuru-onizleme" aria-label="Önizleme">
+          <h3 class="bolum-baslik">Önizleme</h3>
+          <p class="soluk kucuk-yazi">Mezun ve öğretmenler duyuruyu böyle görür.</p>
+          <div data-onizleme></div>
+        </aside>
+      </div>`,
+      alt: `<button class="dugme ikincil" type="button" data-ac="kapat">Vazgeç</button>
+        <button class="dugme" type="submit" form="duyuru-formu">${ikon(d ? 'tamam' : 'duyuru')}<span>${d ? 'Değişiklikleri kaydet' : 'Duyuruyu yayınla'}</span></button>`
+    });
+
+    const f = $katman.querySelector('.duyuru-formu');
+    const zaman = v => { const t = new Date(v); return isNaN(t) ? '' : t.toISOString(); };
+    const topla = () => ({
+      id: d ? d.id : '',
+      baslik: f.baslik.value, metin: f.metin.value, tur: f.tur.value, hedef: f.hedef.value,
+      baglantiUrl: f.baglantiUrl.value.trim(), baglantiMetni: f.baglantiMetni.value,
+      baslangic: zaman(f.baslangic.value), bitis: zaman(f.bitis.value),
+      eposta: f.eposta.checked && !epostaGitti
+    });
+    const guncelle = () => {
+      const v = topla();
+      $katman.querySelector('[data-sayac]').textContent = sayi(f.metin.value.length);
+      $katman.querySelector('[data-onizleme]').innerHTML = duyuruKarti({
+        tur: v.tur, baslik: v.baslik || 'Duyuru başlığı', metin: v.metin || 'Duyuru metni burada görünecek.',
+        baglantiUrl: /^https?:\/\//i.test(v.baglantiUrl) ? v.baglantiUrl : '', baglantiMetni: v.baglantiMetni,
+        baslangic: v.baslangic, bitis: v.bitis
+      });
+      const b = new Date(f.baslangic.value), s = new Date(f.bitis.value);
+      const gun = (s - b) / 864e5;
+      $katman.querySelectorAll('[data-sure]').forEach(c => c.classList.toggle('aktif', Math.abs(gun - c.dataset.sure) < 0.01));
+      $katman.querySelector('[data-sure-ozet]').textContent = isNaN(gun) ? '' : gun <= 0
+        ? 'Bitiş, başlangıçtan sonra olmalıdır.'
+        : `Duyuru ${tarihSaat(b)} – ${tarihSaat(s)} arasında yayında kalır (${gun >= 1 ? Math.round(gun) + ' gün' : Math.round(gun * 24) + ' saat'}).`;
+    };
+    f.addEventListener('input', guncelle);
+    f.addEventListener('change', guncelle);
+    $katman.querySelectorAll('[data-sure]').forEach(c => c.addEventListener('click', () => {
+      let b = new Date(f.baslangic.value);
+      if (isNaN(b)) { b = new Date(); f.baslangic.value = yerelGirdi(b); }
+      f.bitis.value = yerelGirdi(b.getTime() + c.dataset.sure * 864e5);
+      guncelle();
+    }));
+    guncelle();
+
+    formuBagla(f, async v => {
+      if (v.eposta && !await onayIste(`Duyuru, “${HEDEF_ADI[v.hedef]}” kitlesindeki herkese e-postayla da gönderilecek. Bu işlem geri alınamaz.`, 'Yayınla ve gönder')) return;
+      const r = await Api.duyuruKaydet(v);
+      bildir(d ? 'Duyuru güncellendi.' : r.durum === 'planli' ? 'Duyuru planlandı; başlangıç tarihinde yayına girecek.' : 'Duyuru yayınlandı.', 'basarili');
+      S.duyuruSekmesi = r.durum;
+      cekmeceKapat();
+      git('#/duyurular');
+    }, topla);
+  }
+
+  async function duyuruSil(id) {
+    if (!await onayIste('Duyuru kalıcı olarak silinecek ve kullanıcıların ekranından kaldırılacak. Henüz gönderilmemiş e-postalar iptal edilir.', 'Duyuruyu sil', true)) return;
+    try { await Api.duyuruSil(id); bildir('Duyuru silindi.', 'basarili'); yonlendir(); }
+    catch (e) { hataGoster(e); }
+  }
+
+  /* =====================================================================
    * Yönetim paneli
    * ===================================================================== */
 
   async function panelEkrani() {
     const ic = byId('icerik');
     ic.innerHTML = sayfaBasi('Yönetim Paneli', 'Genel görünüm ve yönetim araçları') + yukleniyor();
-    const ist = await Api.istatistik();
+    const [ist, yoneticiler] = await Promise.all([Api.istatistik(), Api.yoneticiler().catch(() => [])]);
     const enCok = Math.max(...ist.yillar.map(y => y.adet), 1);
     const sehirMax = ist.sehirler[0] ? ist.sehirler[0].adet : 1;
     const yuzde = n => ist.toplam ? Math.round(n / ist.toplam * 100) : 0;
@@ -895,10 +1428,11 @@
     ic.innerHTML = `
       ${sayfaBasi('Yönetim Paneli', 'Genel görünüm ve yönetim araçları',
         `<button class="dugme ikincil" data-ac="csv">${ikon('indir')}<span>Excel'e aktar</span></button>
-         <button class="dugme" data-ac="yeni">${ikon('arti')}<span>Mezun ekle</span></button>`)}
+         <button class="dugme ikincil" data-ac="duyuru-yeni">${ikon('duyuru')}<span>Duyuru yap</span></button>
+         <button class="dugme" data-ac="yeni">${ikon('kisiEkle')}<span>Kullanıcı ekle</span></button>`)}
 
       <div class="stat-izgara">
-        <div class="stat"><span class="stat-etiket">${ikon('kisiler', 'kucuk')} Kayıtlı mezun</span><span class="stat-deger">${sayi(ist.toplam)}</span></div>
+        <div class="stat"><span class="stat-etiket">${ikon('kisiler', 'kucuk')} Kayıtlı mezun</span><span class="stat-deger">${sayi(ist.toplam)}</span><span class="stat-alt">${sayi(ist.ogretmen || 0)} öğretmen</span></div>
         <a class="stat ${ist.bekleyen ? 'dikkat' : ''}" href="#/basvurular" data-sekme-git="onay"><span class="stat-etiket">${ikon('gelen', 'kucuk')} Onay bekleyen</span><span class="stat-deger">${ist.bekleyen}</span><span class="stat-alt">${ist.bekleyen ? 'İncelemek için tıklayın' : 'Bekleyen başvuru yok'}</span></a>
         <a class="stat ${ist.silmeTalebi ? 'dikkat' : ''}" href="#/basvurular" data-sekme-git="silme"><span class="stat-etiket">${ikon('cop', 'kucuk')} Silme talebi</span><span class="stat-deger">${ist.silmeTalebi}</span><span class="stat-alt">${ist.silmeTalebi ? 'İşlemek için tıklayın' : 'Bekleyen talep yok'}</span></a>
         <div class="stat"><span class="stat-etiket">${ikon('telefon', 'kucuk')} Telefonunu paylaşan</span><span class="stat-deger">%${yuzde(ist.telefonPaylasan)}</span><span class="stat-alt">E-postasını paylaşan %${yuzde(ist.epostaPaylasan)}</span></div>
@@ -930,19 +1464,17 @@
 
       <div class="panel-izgara">
         <div class="kart">
-          <h3>Yöneticiler</h3>
-          <p class="soluk">Yöneticiler güvenlik gereği uygulama içinden değil, sistemin bağlı olduğu Google E-Tablo'dan eklenir. Böylece yalnızca e-tabloya erişimi olan okul yetkilisi yeni yönetici tanımlayabilir.</p>
-          <ol class="adimlar">
-            <li>Google E-Tablo'yu açın.</li>
-            <li>Üst menüden <strong>OFL Connect → Yönetici ekle</strong>'yi seçin.</li>
-            <li>Yeni yöneticinin e-posta adresini yazın. Bu kişi o adresle giriş yaptığında yönetici paneline erişir.</li>
-          </ol>
+          <h3>Yöneticiler <small class="soluk">(${yoneticiler.length})</small></h3>
+          <ul class="yonetici-listesi">${yoneticiler.map(y => `<li>${avatar({ id: y.eposta, ad: (y.ad || y.eposta)[0], soyad: (y.ad || '').split(' ').slice(-1)[0][0] || '' }, 'kucuk')}
+            <span><strong>${esc(y.ad || 'Yönetici')}</strong><small>${esc(y.eposta)}</small></span></li>`).join('')}</ul>
+          <p class="soluk kucuk-yazi">Öğretmen eklerken <strong>Yönetici yetkisi ver</strong> seçeneğiyle yeni yönetici tanımlayabilirsiniz. Okul dışından birini yönetici yapmak veya yetkiyi kaldırmak için Google E-Tablo'daki <strong>Yoneticiler</strong> sayfasını kullanın (menü: OFL Connect → Yönetici ekle).</p>
         </div>
         <div class="kart">
           <h3>Araçlar</h3>
           <div class="arac-listesi">
             <button class="arac" data-ac="csv">${ikon('indir')}<span><strong>Tüm listeyi Excel'e aktar</strong><small>Onaylı ve bekleyen tüm kayıtlar CSV dosyası olarak iner.</small></span></button>
-            <button class="arac" data-ac="yeni">${ikon('arti')}<span><strong>Mezun ekle</strong><small>Açık rızası alınmış bir mezunu doğrudan ekleyin.</small></span></button>
+            <button class="arac" data-ac="yeni">${ikon('kisiEkle')}<span><strong>Kullanıcı ekle</strong><small>Mezun veya öğretmen ekleyin; öğretmene isterseniz yönetici yetkisi verin.</small></span></button>
+            <button class="arac" data-ac="duyuru-yeni">${ikon('duyuru')}<span><strong>Duyuru yap</strong><small>Mezunlara ve öğretmenlere duyuru yayınlayın, isterseniz e-postayla da gönderin.</small></span></button>
             ${DEMO ? `<button class="arac" data-ac="sifirla">${ikon('yenile')}<span><strong>Demo verisini sıfırla</strong><small>Tüm değişiklikler silinir, hayali veriler ilk haline döner.</small></span></button>` : ''}
           </div>
         </div>
@@ -978,7 +1510,14 @@
       case 'duzenle': return mezunDuzenle(id);
       case 'basvuru-duzenle': return mezunDuzenle(id, () => basvuruIncele(id));
       case 'sil': ev.stopPropagation(); return kayitSil(id);
-      case 'yeni': return yeniMezun();
+      case 'yeni': return kullaniciEkle();
+      case 'hesap': return hesapAc();
+      case 'duyuru-yeni': return duyuruEditoru();
+      case 'duyuru-duzenle': return duyuruEditoru(id);
+      case 'duyuru-sil': return duyuruSil(id);
+      case 'duyuru-sekme':
+        S.duyuruSekmesi = el.dataset.sekme;
+        return duyurularEkrani().catch(hataGoster);
       case 'silme-talebi': return silmeTalebi();
       case 'yenile': return yonlendir();
       case 'sayfa':
@@ -987,7 +1526,7 @@
         document.querySelector('.tablo-kart').scrollIntoView({ block: 'start', behavior: 'smooth' });
         return;
       case 'temizle':
-        S.filtre = { q: '', yil: '', sehir: '', sirala: S.filtre.sirala }; S.sayfa = 1;
+        S.filtre = { q: '', tur: '', yil: '', sehir: '', sirala: S.filtre.sirala }; S.sayfa = 1;
         return rehberEkrani();
       case 'sekme':
         S.basvuruSekmesi = el.dataset.sekme;
@@ -1007,10 +1546,10 @@
       case 'csv': return csvIndir();
       case 'sifirla':
         if (!await onayIste('Demo verileri ilk haline döner ve oturumunuz kapanır.', 'Sıfırla', true)) return;
-        Api.demoSifirla(); S.filtre = { q: '', yil: '', sehir: '', sirala: 'yil' };
+        Api.demoSifirla(); S.filtre = { q: '', tur: '', yil: '', sehir: '', sirala: 'yil' }; S.duyurular = null;
         return git('#/');
       case 'cikis':
-        await Api.cikis(); S.liste = []; return git('#/');
+        await Api.cikis(); S.liste = []; S.duyurular = null; S.acilisYapildi = false; return git('#/');
       case 'kur':
         if (S.kurulumOlayi) { S.kurulumOlayi.prompt(); S.kurulumOlayi = null; kurulumDugmesiniGuncelle(); }
         return;

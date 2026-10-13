@@ -100,8 +100,20 @@ Bu adres girildiğinde demo modu kapanır, uygulama gerçek verilerle çalışı
 
 - **Yeni başvuru:** Yöneticilere e-posta gelir. **Başvurular** sayfasında satıra tıklayınca başvurunun tüm bilgileri açılır;
   oradan **Onayla**, **Düzenle** veya **Reddet** seçilir. Onaylanan mezuna otomatik e-posta gider.
-- **Yönetici eklemek:** E-tabloda **OFL Connect → Yönetici ekle**. Yönetici çıkarmak için **Yoneticiler** sayfasından
-  satırı silin; o kişinin yönetici erişimi hemen sona erer.
+- **Öğretmen eklemek:** Rehber veya Yönetim Paneli'nde **Kullanıcı ekle** → **Öğretmen**. Öğretmenler rehberde
+  “Öğretmen” etiketiyle görünür ve mezunlarla aynı haklara sahiptir. Kaydederken **Yönetici yetkisi ver** işaretlenirse
+  o öğretmen yönetim paneline de erişir.
+- **Yönetici eklemek:** Öğretmen eklerken yukarıdaki seçenekle ya da e-tabloda **OFL Connect → Yönetici ekle**.
+  Yönetici çıkarmak için **Yoneticiler** sayfasından satırı silin; o kişinin yönetici erişimi hemen sona erer.
+- **Duyuru:** **Duyurular → Yeni duyuru**. Tür (bilgi/etkinlik/önemli), hedef kitle (herkes/mezunlar/öğretmenler) ve
+  yayın aralığı seçilir. Duyuru, kullanıcı uygulamayı ilk açtığında bir kez pencere olarak gösterilir; sonra yalnızca
+  **Duyurular** sayfasında durur. Bitiş tarihi geçince kullanıcıların ekranından kendiliğinden kalkar.
+  **E-postayla da gönder** seçilirse duyuru hedef kitledeki herkese gizli alıcı (BCC) olarak e-postayla gider.
+  Günlük e-posta sınırı dolarsa kalanlar ertesi gün otomatik gönderilir (saatlik görev **kuyrukIsle**; kurulum bunu kendisi tanımlar).
+- **Giriş şifresi:** Kullanıcılar ilk girişi e-posta koduyla yapar; ardından isterlerse bir şifre belirler. Sonraki
+  girişlerde e-posta adresi cihazda hatırlanır, yalnızca şifre sorulur. Şifreler e-tabloda düz metin olarak değil,
+  kişiye özel tuzla karıştırılmış özet olarak **Kimlik** sayfasında tutulur. Şifresini unutan “e-posta koduyla gir”
+  bağlantısını kullanır. **Bu cihazda oturumum açık kalsın** seçilirse oturum 90 gün, seçilmezse 12 saat sürer.
 - **Herkesi sistemden çıkarmak** (ör. şüpheli durum): **OFL Connect → Tüm oturumları kapat**.
 - **Yedek:** E-tablonun **Dosya → Sürüm geçmişi**'nde her değişiklik zaten saklanır. Ayrıca dönem sonlarında
   **Dosya → Kopya oluştur** ile bir yedek alınabilir.
@@ -117,13 +129,15 @@ toplu aktarılan kişilerin rızası alınmamış olur.
 
 | Konu | Ücretsiz Gmail hesabı | Google Workspace hesabı |
 |---|---|---|
-| Günlük e-posta (giriş kodu + bildirim) | 100 | 1.500 |
+| Günlük e-posta alıcısı (giriş kodu + bildirim + duyuru) | 100 | 1.500 |
 | E-tablo kapasitesi | 10 milyon hücre (≈ 500.000 mezun) | aynı |
 
-Giriş bir kez yapıldığında 60 gün hatırlandığı için günlük e-posta sınırı olağan kullanımda yeterlidir.
-Sınır dolarsa uygulama kullanıcıya "yarın tekrar deneyin" der; veri kaybı olmaz.
+Oturum 90 güne kadar açık kalabildiği ve kullanıcılar şifreyle girebildiği için giriş kodları sınırı az kullanır.
+E-postalı duyurular bu sınırı en çok tüketen işlemdir: 1.000 kişilik bir duyuru ücretsiz hesapta yaklaşık 12 günde
+tamamlanır (her gün 15 e-postalık pay giriş kodlarına ayrılır). Bu yüzden e-posta seçeneğini yalnızca önemli
+duyurularda kullanın. Sınır dolarsa veri kaybı olmaz; bekleyen e-postalar ertesi gün kaldığı yerden gider.
 
 ## Uygulamada değişiklik yaptıktan sonra
 
 Arayüz dosyalarında (`app.js`, `styles.css` vb.) bir değişiklik yaptığınızda `sw.js` dosyasındaki
-`SURUM` değerini artırın (ör. `ofl-connect-v3`). Böylece telefona kurulu uygulamalar yeni sürümü alır.
+`SURUM` değerini artırın (ör. `ofl-connect-v5`). Böylece telefona kurulu uygulamalar yeni sürümü alır.

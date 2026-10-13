@@ -14,7 +14,8 @@
   if (window.Api) return; // canlı sunucu (api.js) tanımlıysa demo devreye girmez
 
   const OFL = window.OFL;
-  const DEPO_ANAHTARI = 'ofl-connect-demo-v2';
+  const DEPO_ANAHTARI = 'ofl-connect-demo-v3';
+  const HESAP_ANAHTARI = 'ofl-connect-demo-hesap';
   const OTURUM_ANAHTARI = 'ofl-connect-demo-oturum';
   const DEMO_KOD = '123456';
   const YONETICI_EPOSTA = 'yonetici@example.com';
@@ -28,13 +29,14 @@
 
   function hata(mesaj) { const e = new Error(mesaj); e.kullaniciMesaji = true; return e; }
 
-  function depoOku(anahtar) {
-    try { return JSON.parse(localStorage.getItem(anahtar)); } catch (e) { return null; }
+  function depoOku(anahtar, gecici) {
+    try { return JSON.parse((gecici ? sessionStorage : localStorage).getItem(anahtar)); } catch (e) { return null; }
   }
-  function depoYaz(anahtar, deger) {
+  function depoYaz(anahtar, deger, gecici) {
     try {
-      if (deger == null) localStorage.removeItem(anahtar);
-      else localStorage.setItem(anahtar, JSON.stringify(deger));
+      const d = gecici ? sessionStorage : localStorage;
+      if (deger == null) d.removeItem(anahtar);
+      else d.setItem(anahtar, JSON.stringify(deger));
     } catch (e) { /* gizli pencere vb. — demo bellekte çalışmaya devam eder */ }
   }
 
@@ -140,6 +142,7 @@
         const kayitTarihi = tarih(Date.UTC(BU_YIL - 1, 8, 1), Date.UTC(BU_YIL, 5, 1));
         kayitlar.push({
           id: 'm' + String(no++).padStart(4, '0'),
+          tur: 'mezun', brans: '',
           ad, soyad, yil,
           universite: uni, bolum, meslek, sehir,
           telefon: telefon(),
@@ -175,37 +178,135 @@
     // KVKK silme talebi gönderenler
     kayitlar[57].silmeTalebi = tarih(Date.UTC(2026, 8, 20), Date.UTC(2026, 9, 10));
     kayitlar[612].silmeTalebi = tarih(Date.UTC(2026, 8, 20), Date.UTC(2026, 9, 10));
+
+    // Okulun öğretmenleri (yöneticinin elle eklediği kayıtlar)
+    const OGRETMENLER = [
+      ['Serap', 'Güneş', 'Kimya', 'Hacettepe Üniversitesi', 'Kimya Öğretmenliği'],
+      ['Hakan', 'Yurt', 'Matematik', 'Orta Doğu Teknik Üniversitesi', 'Matematik Öğretmenliği'],
+      ['Gülay', 'Ersoy', 'Fizik', 'Gazi Üniversitesi', 'Fizik Öğretmenliği'],
+      ['Murat', 'Akdağ', 'Biyoloji', 'Çukurova Üniversitesi', 'Biyoloji Öğretmenliği'],
+      ['Nermin', 'Soylu', 'Türk Dili ve Edebiyatı', 'Ankara Üniversitesi', 'Türk Dili ve Edebiyatı Öğretmenliği'],
+      ['Kemal', 'Öztaş', 'Tarih', 'Erciyes Üniversitesi', 'Tarih Öğretmenliği'],
+      ['Zehra', 'Kalkan', 'İngilizce', 'Boğaziçi Üniversitesi', 'İngiliz Dili Eğitimi'],
+      ['Okan', 'Demirel', 'Bilişim Teknolojileri', 'Gazi Üniversitesi', 'Bilgisayar ve Öğretim Teknolojileri Eğitimi'],
+      ['Sibel', 'Aksoy', 'Coğrafya', 'Selçuk Üniversitesi', 'Coğrafya Öğretmenliği'],
+      ['Levent', 'Çınar', 'Beden Eğitimi', 'Mersin Üniversitesi', 'Beden Eğitimi ve Spor Öğretmenliği'],
+      ['Aynur', 'Toker', 'Rehberlik', 'Hacettepe Üniversitesi', 'Psikolojik Danışmanlık ve Rehberlik'],
+      ['Cengiz', 'Uzun', 'Felsefe', 'Ege Üniversitesi', 'Felsefe Grubu Öğretmenliği']
+    ];
+    OGRETMENLER.forEach(([ad, soyad, brans, universite, bolum], i) => {
+      const kayitTarihi = tarih(Date.UTC(BU_YIL - 1, 8, 1), Date.UTC(BU_YIL, 2, 1));
+      kayitlar.push({
+        id: 't' + String(i + 1).padStart(3, '0'), tur: 'ogretmen', brans,
+        ad, soyad, yil: 0, universite, bolum,
+        meslek: i === 10 ? 'Psikolojik Danışman' : brans + ' Öğretmeni', sehir: 'Osmaniye',
+        telefon: telefon(), eposta: eposta(ad, soyad),
+        gorunurluk: { egitim: true, meslek: true, sehir: true, telefon: r() < 0.3, eposta: true },
+        durum: 'onayli', kvkkOnay: null, kayitTarihi, guncelleme: kayitTarihi, silmeTalebi: null
+      });
+    });
     return kayitlar;
+  }
+
+  function duyuruUret() {
+    const gun = 864e5, simdi = Date.now();
+    const t = ms => new Date(simdi + ms).toISOString();
+    return [
+      { id: 'd001', tur: 'etkinlik', hedef: 'herkes', baslik: 'Mezunlar Buluşması 2026',
+        metin: 'Sevgili mezunlarımız ve öğretmenlerimiz,\n\nOkulumuzun geleneksel mezunlar buluşması 22 Kasım Cumartesi günü saat 14.00\'te okul konferans salonunda yapılacaktır. Program sonunda bahçede çay ikramı olacaktır.\n\nKatılım durumunuzu aşağıdaki bağlantıdan bildirmenizi rica ederiz.',
+        baglantiMetni: 'Katılım formu', baglantiUrl: 'https://example.com/bulusma-2026',
+        baslangic: t(-2 * gun), bitis: t(38 * gun), eposta: true, olusturma: t(-2 * gun) },
+      { id: 'd002', tur: 'onemli', hedef: 'mezun', baslik: 'Kariyer Günü için konuşmacı arıyoruz',
+        metin: 'Aralık ayında yapılacak Kariyer Günü\'nde 11. ve 12. sınıf öğrencilerimize mesleğini anlatmak isteyen mezunlarımız okul idaresiyle iletişime geçebilir.\n\nÖzellikle tıp, mühendislik ve hukuk alanından gönüllülere ihtiyacımız var.',
+        baglantiMetni: '', baglantiUrl: '', baslangic: t(-5 * gun), bitis: t(20 * gun), eposta: false, olusturma: t(-5 * gun) },
+      { id: 'd003', tur: 'bilgi', hedef: 'ogretmen', baslik: 'Mentorluk programı öğretmen toplantısı',
+        metin: 'Mezun mentorluk programı için ilk değerlendirme toplantısı Perşembe 15.30\'da öğretmenler odasında yapılacaktır.',
+        baglantiMetni: '', baglantiUrl: '', baslangic: t(-1 * gun), bitis: t(6 * gun), eposta: false, olusturma: t(-1 * gun) },
+      { id: 'd004', tur: 'bilgi', hedef: 'herkes', baslik: 'Rehber bilgilerinizi güncel tutun',
+        metin: 'Mezun rehberinin işe yaraması için meslek ve şehir bilgilerinizin güncel olması önemli. Profilim sayfasından bilgilerinizi ve hangi bilginizin görüneceğini dilediğiniz zaman değiştirebilirsiniz.',
+        baglantiMetni: '', baglantiUrl: '', baslangic: t(-10 * gun), bitis: t(50 * gun), eposta: false, olusturma: t(-10 * gun) },
+      { id: 'd005', tur: 'etkinlik', hedef: 'herkes', baslik: 'Yılbaşı dayanışma kermesi',
+        metin: 'Okul aile birliğinin düzenlediği kermes gelirleri ihtiyaç sahibi öğrencilerimizin burslarına aktarılacaktır.',
+        baglantiMetni: '', baglantiUrl: '', baslangic: t(5 * gun), bitis: t(25 * gun), eposta: false, olusturma: t(-1 * gun) },
+      { id: 'd006', tur: 'bilgi', hedef: 'herkes', baslik: 'Okulumuzun 20. kuruluş yıl dönümü',
+        metin: 'Kuruluş yıl dönümümüzü kutlayan tüm mezun ve öğretmenlerimize teşekkür ederiz.',
+        baglantiMetni: '', baglantiUrl: '', baslangic: t(-40 * gun), bitis: t(-25 * gun), eposta: false, olusturma: t(-40 * gun) }
+    ];
+  }
+
+  function ilkDurum() {
+    const kayitlar = veriUret();
+    const duyurular = duyuruUret();
+    const alici = kayitlar.filter(k => k.durum === 'onayli').length;
+    return {
+      kayitlar, duyurular,
+      yoneticiler: [{ eposta: YONETICI_EPOSTA, ad: 'Sistem Yöneticisi' }],
+      sifreler: {},
+      kuyruk: { d001: { toplam: alici, gonderilen: alici } }
+    };
   }
 
   /* ---------- "sunucu" durumu ---------- */
 
-  let kayitlar = depoOku(DEPO_ANAHTARI) || veriUret();
-  let sonId = kayitlar.reduce((m, k) => Math.max(m, parseInt(k.id.slice(1), 10) || 0), 0);
-  const kaydet = () => depoYaz(DEPO_ANAHTARI, kayitlar);
-  const bul = id => kayitlar.find(k => k.id === id);
+  let D = depoOku(DEPO_ANAHTARI) || ilkDurum();
+  const kaydet = () => depoYaz(DEPO_ANAHTARI, D);
+  const bul = id => D.kayitlar.find(k => k.id === id);
+  const yeniId = on => on + Math.random().toString(36).slice(2, 10);
+  const kucuk = e => String(e || '').trim().toLocaleLowerCase('tr-TR');
+  const yoneticiMi = e => D.yoneticiler.some(y => y.eposta === kucuk(e));
+  const sifreDenemeleri = {};
+
+  function oturumOku() { return depoOku(OTURUM_ANAHTARI) || depoOku(OTURUM_ANAHTARI, true); }
+  function oturumYaz(o) {
+    depoYaz(OTURUM_ANAHTARI, null); depoYaz(OTURUM_ANAHTARI, null, true);
+    if (o) depoYaz(OTURUM_ANAHTARI, o, !o.hatirla);
+  }
 
   function oturum() {
-    const o = depoOku(OTURUM_ANAHTARI);
+    const o = oturumOku();
     if (!o) return null;
-    if (o.rol === 'mezun') {
+    if (o.rol === 'admin') {
+      if (!yoneticiMi(o.eposta)) { oturumYaz(null); return null; }
+    } else {
       const k = bul(o.id);
-      if (!k || k.durum !== 'onayli') { depoYaz(OTURUM_ANAHTARI, null); return null; }
+      if (!k || k.durum !== 'onayli') { oturumYaz(null); return null; }
+      o.rol = k.tur === 'ogretmen' ? 'ogretmen' : 'mezun';
     }
-    return o;
+    return { rol: o.rol, id: o.id, ad: o.ad, eposta: o.eposta };
   }
   function yetkiGerekli(rol) {
     const o = oturum();
     if (!o) throw hata('Oturumunuz sona erdi. Lütfen tekrar giriş yapın.');
-    if (rol && o.rol !== rol) throw hata('Bu işlem için yetkiniz yok.');
+    if (rol === 'admin' && o.rol !== 'admin') throw hata('Bu işlem için yetkiniz yok.');
+    if (rol === 'uye' && o.rol === 'admin') throw hata('Bu işlem yalnızca mezun ve öğretmen hesapları içindir.');
     return o;
+  }
+
+  function girisHedefi(eposta) {
+    const y = D.yoneticiler.find(x => x.eposta === eposta);
+    if (y) return { rol: 'admin', id: 'admin', ad: y.ad || 'Yönetici' };
+    const k = D.kayitlar.find(x => x.eposta === eposta && x.durum === 'onayli');
+    return k ? { rol: k.tur === 'ogretmen' ? 'ogretmen' : 'mezun', id: k.id, ad: k.ad + ' ' + k.soyad } : null;
+  }
+
+  function oturumAc(eposta, hedef, hatirla) {
+    oturumYaz({ rol: hedef.rol, id: hedef.id, ad: hedef.ad, eposta, hatirla: !!hatirla });
+    const sifreVar = !!D.sifreler[eposta];
+    depoYaz(HESAP_ANAHTARI, { eposta, ad: hedef.ad, sifreVar });
+    return { rol: hedef.rol, id: hedef.id, ad: hedef.ad, sifreVar };
+  }
+
+  function guncelEposta(o) {
+    if (o.rol === 'admin') return o.eposta;
+    const k = bul(o.id);
+    return k ? k.eposta : o.eposta;
   }
 
   // Gizlilik maskesi: izin verilmeyen alan hiç gönderilmez.
   function maskele(k, izleyen) {
     const tam = izleyen.rol === 'admin' || izleyen.id === k.id;
     const sonuc = {
-      id: k.id, ad: k.ad, soyad: k.soyad, yil: k.yil,
+      id: k.id, ad: k.ad, soyad: k.soyad, yil: k.yil, tur: k.tur, brans: k.brans,
       tamYetki: tam, kendisi: izleyen.id === k.id, gizli: []
     };
     const degerler = {
@@ -228,18 +329,21 @@
 
   function dogrula(v) {
     const h = {};
-    const metin = (x, n) => String(x || '').trim().slice(0, n);
+    const metin = (x, n) => String(x || '').replace(/\s+/g, ' ').trim().slice(0, n);
+    const tur = v.tur === 'ogretmen' ? 'ogretmen' : 'mezun';
     const temiz = {
-      ad: metin(v.ad, 60), soyad: metin(v.soyad, 60),
-      yil: parseInt(v.yil, 10),
+      tur, ad: metin(v.ad, 60), soyad: metin(v.soyad, 60),
+      yil: tur === 'mezun' ? parseInt(v.yil, 10) : 0,
+      brans: tur === 'ogretmen' ? metin(v.brans, 60) : '',
       universite: metin(v.universite, 120), bolum: metin(v.bolum, 120),
       meslek: metin(v.meslek, 80), sehir: metin(v.sehir, 60),
-      eposta: metin(v.eposta, 120).toLocaleLowerCase('tr-TR'),
+      eposta: kucuk(metin(v.eposta, 120)),
       telefon: null
     };
     if (!temiz.ad) h.ad = 'Ad zorunludur.';
     if (!temiz.soyad) h.soyad = 'Soyad zorunludur.';
-    if (!(temiz.yil >= ILK_YIL && temiz.yil <= BU_YIL)) h.yil = 'Geçerli bir mezuniyet yılı seçin.';
+    if (tur === 'mezun' && !(temiz.yil >= ILK_YIL && temiz.yil <= BU_YIL)) h.yil = 'Geçerli bir mezuniyet yılı seçin.';
+    if (tur === 'ogretmen' && !temiz.brans) h.brans = 'Branş zorunludur.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(temiz.eposta)) h.eposta = 'Geçerli bir e-posta adresi girin.';
     if (String(v.telefon || '').trim()) {
       temiz.telefon = telefonDuzenle(v.telefon);
@@ -252,13 +356,30 @@
   }
 
   function epostaKullanimda(eposta, haric) {
-    return eposta === YONETICI_EPOSTA || kayitlar.some(k => k.eposta === eposta && k.id !== haric);
+    if (D.kayitlar.some(k => k.eposta === eposta && k.id !== haric)) return true;
+    const kendi = haric && bul(haric);
+    if (kendi && kendi.eposta === eposta) return false;
+    return yoneticiMi(eposta);
   }
 
   function dogrulamaHatasi(hatalar) {
     const e = hata('Lütfen işaretli alanları düzeltin.');
     e.alanlar = hatalar;
     return e;
+  }
+
+  function duyuruDurumu(d, simdi) {
+    if (simdi < new Date(d.baslangic)) return 'planli';
+    if (simdi > new Date(d.bitis)) return 'bitti';
+    return 'aktif';
+  }
+  function duyuruCikti(d) {
+    const { olusturan, ...dis } = d; // eslint-disable-line no-unused-vars
+    return dis;
+  }
+  function kuyrukDurumu(id) {
+    const q = D.kuyruk[id];
+    return q ? { toplam: q.toplam, gonderilen: q.gonderilen, bekleyen: q.toplam - q.gonderilen } : null;
   }
 
   /* ---------- Api: arayüzün kullandığı tek kapı ---------- */
@@ -270,52 +391,88 @@
     oturum,
 
     oturumAdiniGuncelle(ad) {
-      const o = depoOku(OTURUM_ANAHTARI);
-      if (o) { o.ad = ad; depoYaz(OTURUM_ANAHTARI, o); }
+      const o = oturumOku();
+      if (o) { o.ad = ad; oturumYaz(o); }
+      const h = depoOku(HESAP_ANAHTARI);
+      if (h) { h.ad = ad; depoYaz(HESAP_ANAHTARI, h); }
     },
+    hesap: () => depoOku(HESAP_ANAHTARI),
+    hesapUnut() { depoYaz(HESAP_ANAHTARI, null); },
 
     async girisKoduGonder(eposta) {
       await bekle(350);
-      eposta = String(eposta || '').trim().toLocaleLowerCase('tr-TR');
-      if (eposta === YONETICI_EPOSTA) return { gonderildi: true };
-      const k = kayitlar.find(x => x.eposta === eposta);
-      if (!k) throw hata('Bu e-posta ile kayıtlı bir mezun bulunamadı.');
+      eposta = kucuk(eposta);
+      if (yoneticiMi(eposta)) return { gonderildi: true };
+      const k = D.kayitlar.find(x => x.eposta === eposta);
+      if (!k) throw hata('Bu e-posta ile kayıtlı bir kullanıcı bulunamadı.');
       if (k.durum !== 'onayli') throw hata('Kaydınız henüz yönetici onayı bekliyor.');
       return { gonderildi: true };
     },
 
-    async girisYap(eposta, kod) {
+    async girisYap(eposta, kod, hatirla) {
       await bekle(300);
-      eposta = String(eposta || '').trim().toLocaleLowerCase('tr-TR');
+      eposta = kucuk(eposta);
       if (String(kod).trim() !== DEMO_KOD) throw hata('Kod hatalı. Demo için kod: ' + DEMO_KOD);
-      if (eposta === YONETICI_EPOSTA) return Api.demoGiris('admin');
-      const k = kayitlar.find(x => x.eposta === eposta && x.durum === 'onayli');
-      if (!k) throw hata('Giriş yapılamadı.');
-      return Api.demoGiris('mezun', k.id);
+      const hedef = girisHedefi(eposta);
+      if (!hedef) throw hata('Giriş yapılamadı.');
+      delete sifreDenemeleri[eposta];
+      return oturumAc(eposta, hedef, hatirla);
+    },
+
+    async sifreIleGiris(eposta, sifre, hatirla) {
+      await bekle(300);
+      eposta = kucuk(eposta);
+      const say = sifreDenemeleri[eposta] || 0;
+      if (say >= 5) throw hata('Çok fazla hatalı deneme. 15 dakika sonra tekrar deneyin ya da e-posta koduyla giriş yapın.');
+      const hedef = girisHedefi(eposta);
+      if (!hedef || D.sifreler[eposta] !== String(sifre)) {
+        sifreDenemeleri[eposta] = say + 1;
+        throw hata('E-posta veya şifre hatalı. Kalan deneme hakkı: ' + Math.max(0, 4 - say));
+      }
+      delete sifreDenemeleri[eposta];
+      return oturumAc(eposta, hedef, hatirla);
+    },
+
+    async sifreBelirle(sifre) {
+      const o = yetkiGerekli();
+      await bekle(250);
+      sifre = String(sifre || '');
+      if (sifre.length < 6) throw dogrulamaHatasi({ sifre: 'Şifre en az 6 karakter olmalıdır.' });
+      if (sifre.length > 64) throw dogrulamaHatasi({ sifre: 'Şifre en fazla 64 karakter olabilir.' });
+      const eposta = guncelEposta(o);
+      D.sifreler[eposta] = sifre; // demo: gerçek sistemde yalnızca tuzlu özet saklanır
+      kaydet();
+      const h = depoOku(HESAP_ANAHTARI);
+      if (h) { h.sifreVar = true; depoYaz(HESAP_ANAHTARI, h); }
+      return { sifreVar: true };
+    },
+
+    async hesabim() {
+      const o = yetkiGerekli();
+      const eposta = guncelEposta(o);
+      return { eposta, rol: o.rol, sifreVar: !!D.sifreler[eposta] };
     },
 
     async demoGiris(rol, id) {
-      let o;
-      if (rol === 'admin') o = { rol: 'admin', id: 'admin', ad: 'Sistem Yöneticisi' };
-      else {
+      let eposta, hedef;
+      if (rol === 'admin') {
+        eposta = YONETICI_EPOSTA; hedef = girisHedefi(eposta);
+      } else {
         let k = id ? bul(id) : null;
-        if (id === 'rastgele') {
-          const onayli = kayitlar.filter(x => x.durum === 'onayli');
-          k = onayli[Math.floor(Math.random() * onayli.length)];
-        }
-        if (!k) k = kayitlar.find(x => x.eposta === 'elif.aydin@example.com');
-        o = { rol: 'mezun', id: k.id, ad: k.ad + ' ' + k.soyad };
+        if (!k && rol === 'ogretmen') k = D.kayitlar.find(x => x.tur === 'ogretmen' && x.durum === 'onayli');
+        if (!k) k = D.kayitlar.find(x => x.eposta === 'elif.aydin@example.com');
+        eposta = k.eposta;
+        hedef = { rol: k.tur === 'ogretmen' ? 'ogretmen' : 'mezun', id: k.id, ad: k.ad + ' ' + k.soyad };
       }
-      depoYaz(OTURUM_ANAHTARI, o);
-      return o;
+      return oturumAc(eposta, hedef, true);
     },
 
-    cikis() { depoYaz(OTURUM_ANAHTARI, null); },
+    cikis() { oturumYaz(null); },
 
     async rehber() {
       const o = yetkiGerekli();
       await bekle(120);
-      return kayitlar.filter(k => k.durum === 'onayli').map(k => maskele(k, o));
+      return D.kayitlar.filter(k => k.durum === 'onayli').map(k => maskele(k, o));
     },
 
     async mezun(id) {
@@ -331,37 +488,55 @@
       const k = bul(id);
       if (!k) throw hata('Kayıt bulunamadı.');
       await bekle(300);
-      const { temiz, hatalar } = dogrula(veri);
+      const { temiz, hatalar } = dogrula(Object.assign({}, veri, { tur: k.tur }));
       if (!hatalar.eposta && epostaKullanimda(temiz.eposta, id)) hatalar.eposta = 'Bu e-posta başka bir kayıtta kullanılıyor.';
       if (Object.keys(hatalar).length) throw dogrulamaHatasi(hatalar);
+      if (temiz.eposta !== k.eposta && D.sifreler[k.eposta]) {
+        D.sifreler[temiz.eposta] = D.sifreler[k.eposta];
+        delete D.sifreler[k.eposta];
+      }
       Object.assign(k, temiz, { guncelleme: new Date().toISOString() });
       kaydet();
       return maskele(k, o);
     },
 
-    // Herkese açık: yeni mezun kaydı (yönetici onayına düşer).
-    // Yönetici eklerse doğrudan onaylı olur.
+    // Herkese açık mezun başvurusu (yönetici onayına düşer).
     async kayitOl(veri) {
-      const o = oturum();
       await bekle(400);
-      const { temiz, hatalar } = dogrula(veri);
+      const { temiz, hatalar } = dogrula(Object.assign({}, veri, { tur: 'mezun' }));
       if (!hatalar.eposta && epostaKullanimda(temiz.eposta)) hatalar.eposta = 'Bu e-posta ile zaten bir kayıt var.';
-      const yonetici = o && o.rol === 'admin';
-      if (!yonetici && !veri.kvkkOnay) hatalar.kvkk = 'Devam etmek için açık rıza onayı gereklidir.';
+      if (!veri.kvkkOnay) hatalar.kvkk = 'Devam etmek için açık rıza onayı gereklidir.';
       if (Object.keys(hatalar).length) throw dogrulamaHatasi(hatalar);
       const simdi = new Date().toISOString();
-      const k = Object.assign({ id: 'm' + String(++sonId).padStart(4, '0') }, temiz, {
-        durum: yonetici ? 'onayli' : 'beklemede',
-        kvkkOnay: yonetici ? null : simdi,
-        kayitTarihi: simdi, guncelleme: simdi, silmeTalebi: null
+      const k = Object.assign({ id: yeniId('m') }, temiz, {
+        durum: 'beklemede', kvkkOnay: simdi, kayitTarihi: simdi, guncelleme: simdi, silmeTalebi: null
       });
-      kayitlar.push(k);
+      D.kayitlar.push(k);
       kaydet();
       return { id: k.id, durum: k.durum };
     },
 
+    // Yöneticinin elle eklediği mezun veya öğretmen; doğrudan onaylı olur.
+    async kullaniciEkle(veri) {
+      yetkiGerekli('admin');
+      await bekle(400);
+      const tur = veri.tur === 'ogretmen' ? 'ogretmen' : 'mezun';
+      const { temiz, hatalar } = dogrula(Object.assign({}, veri, { tur }));
+      if (!hatalar.eposta && D.kayitlar.some(k => k.eposta === temiz.eposta)) hatalar.eposta = 'Bu e-posta ile zaten bir kayıt var.';
+      if (Object.keys(hatalar).length) throw dogrulamaHatasi(hatalar);
+      const simdi = new Date().toISOString();
+      const k = Object.assign({ id: yeniId(tur === 'ogretmen' ? 't' : 'm') }, temiz, {
+        durum: 'onayli', kvkkOnay: null, kayitTarihi: simdi, guncelleme: simdi, silmeTalebi: null
+      });
+      D.kayitlar.push(k);
+      const yonetici = tur === 'ogretmen' && !!veri.yonetici;
+      if (yonetici && !yoneticiMi(k.eposta)) D.yoneticiler.push({ eposta: k.eposta, ad: k.ad + ' ' + k.soyad });
+      kaydet();
+      return { id: k.id, durum: 'onayli', yonetici, bilgilendirildi: !!veri.bilgilendir };
+    },
+
     async silmeTalebiGonder() {
-      const o = yetkiGerekli('mezun');
+      const o = yetkiGerekli('uye');
       const k = bul(o.id);
       await bekle(250);
       k.silmeTalebi = k.silmeTalebi ? null : new Date().toISOString();
@@ -369,22 +544,86 @@
       return maskele(k, o);
     },
 
+    async duyurular() {
+      const o = yetkiGerekli();
+      await bekle(150);
+      const simdi = new Date();
+      if (o.rol === 'admin') {
+        return D.duyurular.map(d => Object.assign(duyuruCikti(d), { durum: duyuruDurumu(d, simdi), epostaDurumu: kuyrukDurumu(d.id) }))
+          .sort((a, b) => String(b.olusturma).localeCompare(String(a.olusturma)));
+      }
+      return D.duyurular
+        .filter(d => duyuruDurumu(d, simdi) === 'aktif' && (d.hedef === 'herkes' || d.hedef === o.rol))
+        .map(duyuruCikti)
+        .sort((a, b) => String(b.baslangic).localeCompare(String(a.baslangic)));
+    },
+
+    async duyuruKaydet(v) {
+      const o = yetkiGerekli('admin');
+      await bekle(350);
+      const h = {};
+      const metin = (x, n) => String(x == null ? '' : x).trim().slice(0, n);
+      const d = {
+        baslik: metin(v.baslik, 120),
+        metin: String(v.metin || '').replace(/\r\n/g, '\n').trim().slice(0, 4000),
+        tur: ['bilgi', 'etkinlik', 'onemli'].includes(v.tur) ? v.tur : 'bilgi',
+        hedef: ['herkes', 'mezun', 'ogretmen'].includes(v.hedef) ? v.hedef : 'herkes',
+        baglantiMetni: metin(v.baglantiMetni, 40), baglantiUrl: metin(v.baglantiUrl, 500),
+        baslangic: new Date(v.baslangic), bitis: new Date(v.bitis), eposta: !!v.eposta
+      };
+      if (!d.baslik) h.baslik = 'Başlık zorunludur.';
+      if (!d.metin) h.metin = 'Duyuru metni zorunludur.';
+      if (d.baglantiUrl && !/^https?:\/\/\S+$/i.test(d.baglantiUrl)) h.baglantiUrl = 'Bağlantı http:// veya https:// ile başlamalıdır.';
+      if (isNaN(d.baslangic)) h.baslangic = 'Geçerli bir başlangıç tarihi seçin.';
+      if (isNaN(d.bitis)) h.bitis = 'Geçerli bir bitiş tarihi seçin.';
+      else if (!h.baslangic && d.bitis <= d.baslangic) h.bitis = 'Bitiş, başlangıçtan sonra olmalıdır.';
+      else if (d.bitis <= new Date()) h.bitis = 'Bitiş tarihi geçmişte olamaz.';
+      if (Object.keys(h).length) throw dogrulamaHatasi(h);
+      if (d.baglantiUrl && !d.baglantiMetni) d.baglantiMetni = 'Ayrıntılar';
+      const simdi = new Date().toISOString();
+      const mevcut = v.id ? D.duyurular.find(x => x.id === v.id) : null;
+      if (v.id && !mevcut) throw hata('Duyuru bulunamadı.');
+      const k = Object.assign(mevcut || { id: yeniId('d'), olusturan: o.eposta, olusturma: simdi }, d, {
+        baslangic: d.baslangic.toISOString(), bitis: d.bitis.toISOString(), guncelleme: simdi,
+        eposta: d.eposta || !!(mevcut && mevcut.eposta)
+      });
+      if (!mevcut) D.duyurular.push(k);
+      if (k.eposta && !D.kuyruk[k.id]) {
+        // Demo: gerçek sistemdeki günlük kotayı taklit eder (bugün 85 kişi, kalanı sonraki günlere).
+        const toplam = D.kayitlar.filter(x => x.durum === 'onayli' && (k.hedef === 'herkes' || k.hedef === x.tur)).length;
+        D.kuyruk[k.id] = { toplam, gonderilen: duyuruDurumu(k, new Date()) === 'aktif' ? Math.min(toplam, 85) : 0 };
+      }
+      kaydet();
+      return Object.assign(duyuruCikti(k), { durum: duyuruDurumu(k, new Date()), epostaDurumu: kuyrukDurumu(k.id) });
+    },
+
+    async duyuruSil(id) {
+      yetkiGerekli('admin');
+      await bekle(200);
+      const i = D.duyurular.findIndex(d => d.id === id);
+      if (i < 0) throw hata('Duyuru bulunamadı.');
+      D.duyurular.splice(i, 1);
+      delete D.kuyruk[id];
+      kaydet();
+      return { silindi: true };
+    },
+
     async rozetler() {
       yetkiGerekli('admin');
       return {
-        bekleyen: kayitlar.filter(k => k.durum === 'beklemede').length,
-        silme: kayitlar.filter(k => k.silmeTalebi).length
+        bekleyen: D.kayitlar.filter(k => k.durum === 'beklemede').length,
+        silme: D.kayitlar.filter(k => k.silmeTalebi).length
       };
     },
 
     async bekleyenler() {
       const o = yetkiGerekli('admin');
-      return kayitlar.filter(k => k.durum === 'beklemede').map(k => maskele(k, o));
+      return D.kayitlar.filter(k => k.durum === 'beklemede').map(k => maskele(k, o));
     },
 
     async silmeTalepleri() {
       const o = yetkiGerekli('admin');
-      return kayitlar.filter(k => k.silmeTalebi).map(k => maskele(k, o));
+      return D.kayitlar.filter(k => k.silmeTalebi).map(k => maskele(k, o));
     },
 
     async onayla(id) {
@@ -397,32 +636,45 @@
     },
 
     async sil(id) {
-      yetkiGerekli('admin');
+      const o = yetkiGerekli('admin');
       await bekle(200);
-      const i = kayitlar.findIndex(k => k.id === id);
+      const i = D.kayitlar.findIndex(k => k.id === id);
       if (i < 0) throw hata('Kayıt bulunamadı.');
-      kayitlar.splice(i, 1);
+      const k = D.kayitlar[i];
+      D.kayitlar.splice(i, 1);
+      if (k.tur === 'ogretmen' && k.eposta !== o.eposta && D.yoneticiler.length > 1) {
+        D.yoneticiler = D.yoneticiler.filter(y => y.eposta !== k.eposta);
+      }
+      if (!yoneticiMi(k.eposta)) delete D.sifreler[k.eposta];
       kaydet();
+    },
+
+    async yoneticiler() {
+      yetkiGerekli('admin');
+      return D.yoneticiler.map(y => ({ eposta: y.eposta, ad: y.ad }));
     },
 
     async istatistik() {
       yetkiGerekli('admin');
-      const onayli = kayitlar.filter(k => k.durum === 'onayli');
+      const onayli = D.kayitlar.filter(k => k.durum === 'onayli');
+      const mezunlar = onayli.filter(k => k.tur !== 'ogretmen');
       const yillar = {};
       for (let y = ILK_YIL; y <= BU_YIL; y++) yillar[y] = 0;
       const sehirler = {};
       let telefonPaylasan = 0, epostaPaylasan = 0;
-      for (const k of onayli) {
+      for (const k of mezunlar) {
         yillar[k.yil] = (yillar[k.yil] || 0) + 1;
-        sehirler[k.sehir] = (sehirler[k.sehir] || 0) + 1;
+        const s = k.sehir || 'Belirtilmemiş';
+        sehirler[s] = (sehirler[s] || 0) + 1;
         if (k.gorunurluk.telefon) telefonPaylasan++;
         if (k.gorunurluk.eposta) epostaPaylasan++;
       }
       return {
-        toplam: onayli.length,
-        bekleyen: kayitlar.filter(k => k.durum === 'beklemede').length,
-        silmeTalebi: kayitlar.filter(k => k.silmeTalebi).length,
-        telefonPaylasan, epostaPaylasan,
+        toplam: mezunlar.length,
+        ogretmen: onayli.length - mezunlar.length,
+        bekleyen: D.kayitlar.filter(k => k.durum === 'beklemede').length,
+        silmeTalebi: D.kayitlar.filter(k => k.silmeTalebi).length,
+        telefonPaylasan, epostaPaylasan, epostaKotasi: 100,
         yillar: Object.entries(yillar).map(([yil, adet]) => ({ yil: +yil, adet })),
         sehirler: Object.entries(sehirler).map(([sehir, adet]) => ({ sehir, adet }))
           .sort((a, b) => b.adet - a.adet)
@@ -431,22 +683,24 @@
 
     async csv() {
       yetkiGerekli('admin');
-      const basliklar = ['Ad', 'Soyad', 'Mezuniyet Yılı', 'Üniversite', 'Bölüm', 'Meslek', 'Şehir', 'Telefon', 'E-posta', 'Durum', 'Son Güncelleme'];
+      const basliklar = ['Tür', 'Ad', 'Soyad', 'Mezuniyet Yılı', 'Branş', 'Üniversite', 'Bölüm', 'Meslek', 'Şehir', 'Telefon', 'E-posta', 'Durum', 'Son Güncelleme'];
       const hucre = v => {
         let s = String(v == null ? '' : v);
         if (/^[=+\-@]/.test(s)) s = "'" + s; // Excel formül enjeksiyonuna karşı
         return '"' + s.replace(/"/g, '""') + '"';
       };
-      const satirlar = kayitlar.map(k => [k.ad, k.soyad, k.yil, k.universite, k.bolum, k.meslek, k.sehir, k.telefon, k.eposta,
+      const satirlar = D.kayitlar.map(k => [k.tur === 'ogretmen' ? 'Öğretmen' : 'Mezun', k.ad, k.soyad, k.yil || '', k.brans,
+        k.universite, k.bolum, k.meslek, k.sehir, k.telefon, k.eposta,
         k.durum === 'onayli' ? 'Onaylı' : 'Onay bekliyor', k.guncelleme.slice(0, 10)].map(hucre).join(';'));
       return '﻿' + [basliklar.map(hucre).join(';')].concat(satirlar).join('\r\n');
     },
 
     demoSifirla() {
       depoYaz(DEPO_ANAHTARI, null);
-      depoYaz(OTURUM_ANAHTARI, null);
-      kayitlar = veriUret();
-      sonId = kayitlar.length;
+      depoYaz(HESAP_ANAHTARI, null);
+      oturumYaz(null);
+      try { Object.keys(localStorage).filter(a => a.startsWith('ofl-duyuru-')).forEach(a => localStorage.removeItem(a)); } catch (e) { /* yok say */ }
+      D = ilkDurum();
     }
   });
 

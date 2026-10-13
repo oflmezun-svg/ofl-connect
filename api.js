@@ -7,14 +7,30 @@
   if (!URL_) return;
 
   const OTURUM_ANAHTARI = 'ofl-connect-oturum';
+  const HESAP_ANAHTARI = 'ofl-connect-hesap';
 
-  function oku() { try { return JSON.parse(localStorage.getItem(OTURUM_ANAHTARI)); } catch (e) { return null; } }
+  // "Oturumum açık kalsın" seçilirse oturum localStorage'da (kalıcı), seçilmezse sessionStorage'da
+  // (uygulama/sekme kapanınca biter) tutulur.
+  function depo(kalici) { try { return kalici ? localStorage : sessionStorage; } catch (e) { return null; } }
+  function oku() {
+    for (const d of [depo(true), depo(false)]) {
+      try { const o = d && JSON.parse(d.getItem(OTURUM_ANAHTARI)); if (o) return o; } catch (e) { /* yok say */ }
+    }
+    return null;
+  }
   function yaz(o) {
-    try { o ? localStorage.setItem(OTURUM_ANAHTARI, JSON.stringify(o)) : localStorage.removeItem(OTURUM_ANAHTARI); }
-    catch (e) { /* gizli pencere: oturum yalnızca bu sekmede yaşar */ }
+    for (const d of [depo(true), depo(false)]) { try { d && d.removeItem(OTURUM_ANAHTARI); } catch (e) { /* yok say */ } }
+    if (o) { try { depo(!!o.hatirla).setItem(OTURUM_ANAHTARI, JSON.stringify(o)); } catch (e) { /* gizli pencere */ } }
     bellek = o;
   }
   let bellek = oku();
+
+  // Bu cihazda hatırlanan hesap: e-posta sabit kalır, yalnızca şifre sorulur.
+  function hesapOku() { try { return JSON.parse(localStorage.getItem(HESAP_ANAHTARI)); } catch (e) { return null; } }
+  function hesapYaz(h) {
+    try { h ? localStorage.setItem(HESAP_ANAHTARI, JSON.stringify(h)) : localStorage.removeItem(HESAP_ANAHTARI); }
+    catch (e) { /* yok say */ }
+  }
 
   function hata(mesaj, ek) { const e = new Error(mesaj); e.kullaniciMesaji = true; Object.assign(e, ek || {}); return e; }
 
@@ -44,17 +60,40 @@
     return yanit.veri;
   }
 
+  function oturumAc(o, hatirla) {
+    yaz({ token: o.token, rol: o.rol, id: o.id, ad: o.ad, hatirla: !!hatirla });
+    hesapYaz({ eposta: o.eposta, ad: o.ad, sifreVar: !!o.sifreVar });
+    return { rol: o.rol, id: o.id, ad: o.ad, sifreVar: !!o.sifreVar };
+  }
+
   window.Api = Object.assign({}, window.OFL, {
     MOD: 'canli',
 
     oturum() { return bellek ? { rol: bellek.rol, id: bellek.id, ad: bellek.ad } : null; },
-    oturumAdiniGuncelle(ad) { if (bellek) { bellek.ad = ad; yaz(bellek); } },
+    oturumAdiniGuncelle(ad) {
+      if (bellek) { bellek.ad = ad; yaz(bellek); }
+      const h = hesapOku(); if (h) { h.ad = ad; hesapYaz(h); }
+    },
+    hesap: hesapOku,
+    hesapUnut() { hesapYaz(null); },
 
     girisKoduGonder: eposta => cagir('kodGonder', { eposta }),
-    async girisYap(eposta, kod) {
-      const o = await cagir('girisYap', { eposta, kod });
-      yaz(o);
-      return { rol: o.rol, id: o.id, ad: o.ad };
+    async girisYap(eposta, kod, hatirla) {
+      return oturumAc(await cagir('girisYap', { eposta, kod, hatirla: !!hatirla }), hatirla);
+    },
+    async sifreIleGiris(eposta, sifre, hatirla) {
+      return oturumAc(await cagir('sifreIleGiris', { eposta, sifre, hatirla: !!hatirla }), hatirla);
+    },
+    async sifreBelirle(sifre) {
+      const r = await cagir('sifreBelirle', { sifre });
+      const h = hesapOku(); if (h) { h.sifreVar = true; hesapYaz(h); }
+      return r;
+    },
+    async hesabim() {
+      const r = await cagir('hesabim');
+      const h = hesapOku() || {};
+      hesapYaz(Object.assign(h, { eposta: r.eposta, sifreVar: r.sifreVar, ad: h.ad || (bellek && bellek.ad) }));
+      return r;
     },
     async cikis() {
       const token = bellek && bellek.token;
@@ -70,6 +109,7 @@
     profilKaydet: (id, veri) => cagir('profilKaydet', Object.assign({}, veri, { id })),
     kayitOl: veri => cagir('kayitOl', veri),
     silmeTalebiGonder: () => cagir('silmeTalebiGonder'),
+    duyurular: () => cagir('duyurular'),
 
     rozetler: () => cagir('rozetler'),
     bekleyenler: () => cagir('bekleyenler'),
@@ -77,6 +117,10 @@
     onayla: id => cagir('onayla', { id }),
     sil: id => cagir('sil', { id }),
     istatistik: () => cagir('istatistik'),
-    csv: () => cagir('csv')
+    csv: () => cagir('csv'),
+    kullaniciEkle: veri => cagir('kullaniciEkle', veri),
+    yoneticiler: () => cagir('yoneticiler'),
+    duyuruKaydet: veri => cagir('duyuruKaydet', veri),
+    duyuruSil: id => cagir('duyuruSil', { id })
   });
 })();
