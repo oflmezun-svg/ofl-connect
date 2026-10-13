@@ -1,0 +1,9 @@
+# Mezun verisi içeren dosyalar asla depoya girmemeli
+*.csv
+*.xlsx
+*.xls
+*.ods
+*.json.bak
+
+.DS_Store
+.claude/
