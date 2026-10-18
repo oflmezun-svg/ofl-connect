@@ -100,6 +100,22 @@ Bu adres girildiğinde demo modu kapanır, uygulama gerçek verilerle çalışı
 
 - **Yeni başvuru:** Yöneticilere e-posta gelir. **Başvurular** sayfasında satıra tıklayınca başvurunun tüm bilgileri açılır;
   oradan **Onayla**, **Düzenle** veya **Reddet** seçilir. Onaylanan mezuna otomatik e-posta gider.
+- **Yanlışlıkla reddetme:** Reddedilen başvuru hemen silinmez; **Başvurular → Reddedilenler** sekmesinde 30 gün durur ve
+  oradan onaylanabilir. 30 gün sonra kendiliğinden kalıcı olarak silinir. Kişi aynı e-postayla yeniden de başvurabilir.
+- **Şifresini unutan kullanıcı:** Giriş ekranındaki **Şifremi unuttum** bağlantısıyla e-postasına gelen kodla yeni şifre belirler
+  ve doğrudan giriş yapar. Yönetici de kişinin bilgi penceresinden **Şifreyi sıfırla** (kişi e-posta koduyla girip yenisini belirler)
+  veya **Geçici şifre ver** (kişiye siz iletirsiniz; ilk girişte kendi şifresini belirlemek zorundadır) seçebilir. Her iki durumda
+  kişiye bilgi e-postası gider.
+- **Çevrimiçi kullanıcılar:** Yönetici rehberde son 5 dakikada uygulamayı kullananları yeşil işaretle ve listenin en üstünde görür
+  (yalnızca yöneticiler görür).
+- **Zorunlu alanlar ve yazım:** Mezun kaydında ve profil güncellemesinde tüm alanlar zorunludur (çalışma durumuna göre).
+  Ad, soyad, üniversite, bölüm, meslek, kurum ve şehir e-tabloya Türkçe yazım kurallarına göre düzeltilerek kaydedilir
+  (ör. "ahmet YILMAZ" → "Ahmet Yılmaz", "odtü" → "ODTÜ").
+- **Telefon bildirimleri:** Duyuru yayınlanınca bildirimleri açmış kullanıcıların telefonuna bildirim gider (duyuru
+  düzenleyicisinde "Telefonlara bildirim gönder" seçeneği). Android'de tarayıcıdan da çalışır; iPhone'da ise uygulamanın
+  ana ekrana eklenmiş olması gerekir (iOS 16.4 ve üzeri). Kayıtlı cihazlar e-tablodaki **Bildirimler** sayfasındadır.
+- **Kurulum rehberi:** Telefonundan tarayıcıyla giren veya kayıt olan kullanıcıya, telefonunun iPhone/Android olmasına göre
+  yazılı adımlı, animasyonlu "ana ekrana ekleme" video rehberi açılır. Android'de tek dokunuşla yükleme düğmesi de çıkar.
 - **Öğretmen eklemek:** Rehber veya Yönetim Paneli'nde **Kullanıcı ekle** → **Öğretmen**. Öğretmenler rehberde
   “Öğretmen” etiketiyle görünür ve mezunlarla aynı haklara sahiptir. Kaydederken **Yönetici yetkisi ver** işaretlenirse
   o öğretmen yönetim paneline de erişir.
@@ -140,4 +156,4 @@ duyurularda kullanın. Sınır dolarsa veri kaybı olmaz; bekleyen e-postalar er
 ## Uygulamada değişiklik yaptıktan sonra
 
 Arayüz dosyalarında (`app.js`, `styles.css` vb.) bir değişiklik yaptığınızda `sw.js` dosyasındaki
-`SURUM` değerini artırın (ör. `ofl-connect-v5`). Böylece telefona kurulu uygulamalar yeni sürümü alır.
+`SURUM` değerini artırın (ör. `ofl-connect-v6`). Böylece telefona kurulu uygulamalar yeni sürümü alır.

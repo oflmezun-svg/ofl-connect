@@ -60,10 +60,34 @@
     return yanit.veri;
   }
 
+  // Telefon bildirimi geldiğinde service worker güncel duyuruyu çekebilsin diye
+  // "oturum açık kalsın" seçilmişse anahtar IndexedDB'de de tutulur.
+  function idb(islem) {
+    return new Promise(coz => {
+      try {
+        const ac = indexedDB.open('ofl-connect', 1);
+        ac.onupgradeneeded = () => ac.result.createObjectStore('ayar');
+        ac.onsuccess = () => {
+          const tx = ac.result.transaction('ayar', 'readwrite');
+          islem(tx.objectStore('ayar'));
+          tx.oncomplete = () => coz(true);
+          tx.onerror = () => coz(false);
+        };
+        ac.onerror = () => coz(false);
+      } catch (e) { coz(false); }
+    });
+  }
+  function swOturumu(o) {
+    idb(st => o && o.hatirla ? st.put({ token: o.token, api: URL_ }, 'oturum') : st.delete('oturum'));
+  }
+
+  if (bellek) swOturumu(bellek); // önceki sürümden kalan açık oturumlar için
+
   function oturumAc(o, hatirla) {
     yaz({ token: o.token, rol: o.rol, id: o.id, ad: o.ad, hatirla: !!hatirla });
+    swOturumu(bellek);
     hesapYaz({ eposta: o.eposta, ad: o.ad, sifreVar: !!o.sifreVar });
-    return { rol: o.rol, id: o.id, ad: o.ad, sifreVar: !!o.sifreVar };
+    return { rol: o.rol, id: o.id, ad: o.ad, sifreVar: !!o.sifreVar, degistirmeli: !!o.degistirmeli };
   }
 
   window.Api = Object.assign({}, window.OFL, {
@@ -84,6 +108,10 @@
     async sifreIleGiris(eposta, sifre, hatirla) {
       return oturumAc(await cagir('sifreIleGiris', { eposta, sifre, hatirla: !!hatirla }), hatirla);
     },
+    sifreSifirlamaKodu: eposta => cagir('kodGonder', { eposta, amac: 'sifre' }),
+    async sifreYenile(eposta, kod, sifre, hatirla) {
+      return oturumAc(await cagir('sifreYenile', { eposta, kod, sifre, hatirla: !!hatirla }), hatirla);
+    },
     async sifreBelirle(sifre) {
       const r = await cagir('sifreBelirle', { sifre });
       const h = hesapOku(); if (h) { h.sifreVar = true; hesapYaz(h); }
@@ -98,6 +126,7 @@
     async cikis() {
       const token = bellek && bellek.token;
       yaz(null);
+      swOturumu(null);
       if (token) {
         fetch(URL_, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
           body: JSON.stringify({ islem: 'cikis', token }) }).catch(() => {});
@@ -110,9 +139,17 @@
     kayitOl: veri => cagir('kayitOl', veri),
     silmeTalebiGonder: () => cagir('silmeTalebiGonder'),
     duyurular: () => cagir('duyurular'),
+    nabiz: () => cagir('nabiz'),
+    pushAnahtari: () => cagir('pushAnahtari').then(r => r.anahtar),
+    pushKaydet: endpoint => cagir('pushKaydet', { endpoint }),
+    pushSil: endpoint => cagir('pushSil', { endpoint }),
 
     rozetler: () => cagir('rozetler'),
     bekleyenler: () => cagir('bekleyenler'),
+    reddedilenler: () => cagir('reddedilenler'),
+    reddet: id => cagir('reddet', { id }),
+    cevrimici: () => cagir('cevrimici'),
+    kullaniciSifre: (id, islem, sifre) => cagir('kullaniciSifre', { id, islem, sifre }),
     silmeTalepleri: () => cagir('silmeTalepleri'),
     onayla: id => cagir('onayla', { id }),
     sil: id => cagir('sil', { id }),

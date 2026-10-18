@@ -16,8 +16,10 @@ Giriş ekranındaki **Yönetici** / **Mezun** / **Öğretmen** düğmeleriyle gi
 |---|---|---|
 | Rehber | Tüm bilgiler | Ad-soyad, yıl/branş + kişinin **görünür** yaptığı bilgiler |
 | Bilgi düzenleme | Herkesin | Yalnızca kendisinin (Profilim) |
-| Duyurular | Hazırlar, yayınlar, e-postayla gönderir | Görür (ilk açılışta bir kez bildirim) |
-| Başvuru inceleme ve onay | ✓ | — |
+| Duyurular | Hazırlar, yayınlar, e-posta ve telefon bildirimiyle gönderir | Görür; isterse telefon bildirimi alır |
+| Başvuru inceleme, onay, red ve reddi geri alma (30 gün) | ✓ | — |
+| Kullanıcının şifresini sıfırlama / geçici şifre verme | ✓ | Kendisi “Şifremi unuttum” ile yeniler |
+| Çevrimiçi kullanıcıları görme | ✓ | — |
 | Kullanıcı (mezun/öğretmen) ekleme | ✓ | — |
 | Kayıt silme, Excel'e aktarma | ✓ | — |
 | KVKK silme talebi | İşler | Gönderir |
@@ -36,7 +38,7 @@ Gizlilik kuralları sunucuda uygulanır: Bir mezunun gizlediği bilgi diğer mez
 | `ortak.js` | Ortak kurallar (alanlar, telefon biçimi, Türkçe arama) |
 | `api.js` | Gerçek sunucuya (Apps Script) bağlantı |
 | `data.js` | Demo sunucusu (hayali veriler) |
-| `manifest.json`, `sw.js`, `icons/` | Telefona kurulum ve çevrimdışı açılış |
+| `manifest.json`, `sw.js`, `icons/` | Telefona kurulum, çevrimdışı açılış ve duyuru bildirimleri |
 | `sunucu/Code.gs` | Google Apps Script sunucu kodu |
 
 Logo okulun web sitesindeki duyuru görselinden alınmıştır. Daha yüksek çözünürlüklü bir logo dosyası olursa
