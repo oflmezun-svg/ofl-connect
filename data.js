@@ -738,25 +738,34 @@
       return D.kayitlar.filter(k => k.silmeTalebi).map(k => maskele(k, o));
     },
 
-    async onayla(id) {
+    async onayla(id, tur, brans) {
       yetkiGerekli('admin');
       const k = bul(id);
       if (!k) throw hata('Kayıt bulunamadı.');
       await bekle(200);
+      if (tur === 'ogretmen') {
+        brans = OFL.yaziDuzelt(String(brans || '').trim());
+        if (!brans) throw hata('Öğretmen için branş yazın.');
+        k.tur = 'ogretmen'; k.brans = brans; k.calisma = '';
+        if (!/[öÖoO][ğĞgG]retmen/i.test(k.meslek || '')) k.meslek = brans + ' Öğretmeni';
+      } else if (tur === 'mezun') k.tur = 'mezun';
       k.durum = 'onayli';
       k.redTarihi = null;
       kaydet();
     },
 
-    async reddet(id) {
+    async reddet(id, sebep, bildir) {
       yetkiGerekli('admin');
       const k = bul(id);
       if (!k || k.durum !== 'beklemede') throw hata('Bekleyen başvuru bulunamadı.');
+      sebep = String(sebep || '').trim();
+      if (bildir && sebep.length < 5) throw hata('E-postayla gönderilecekse kısa bir red sebebi yazın.');
       await bekle(200);
       k.durum = 'reddedildi';
       k.redTarihi = new Date().toISOString();
       kaydet();
-      return { durum: k.durum };
+      // Demoda e-posta gönderilmez; gerçek sistemde sebep başvurana iletilir.
+      return { durum: k.durum, bildirildi: !!bildir };
     },
 
     async reddedilenler() {

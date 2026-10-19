@@ -815,7 +815,6 @@
             <p><strong>Kimler görebilir:</strong> Okul yönetiminin belirlediği sistem yöneticileri tüm bilgilerinizi görür. Diğer kullanıcılar yalnızca ad-soyadınızı, mezuniyet yılınızı ve sizin “Görünür” olarak işaretlediğiniz bilgileri görebilir. Bilgileriniz üçüncü kişilere verilmez.</p>
             <p><strong>Saklama:</strong> Veriler Google'ın bulut hizmetlerinde (Google E-Tablolar) saklanır; bu hizmetin sunucuları yurt dışında bulunabilir. Reddedilen başvurular ${30} gün sonra kalıcı olarak silinir.</p>
             <p><strong>Haklarınız:</strong> 6698 sayılı KVKK'nın 11. maddesi uyarınca bilgilerinizi istediğiniz zaman güncelleyebilir, görünürlüğünü değiştirebilir veya silinmesini talep edebilirsiniz.</p>
-            <p class="soluk">Bu metin taslaktır; yayına almadan önce okul idaresi tarafından gözden geçirilmelidir.</p>
           </div>
         </details>
         <label class="onay-kutusu" data-zorunlu-kutu>
@@ -1534,6 +1533,20 @@
           <p class="soluk kucuk-yazi">Onaylandığında diğer kullanıcıların görebileceği bilgiler:</p>
           <ul class="gorunurluk-ozeti">${OFL.ALANLAR.map(a => `<li><span>${ALAN_ADI[a]}</span>${gorunurluk(a)}</li>`).join('')}</ul>
         </section>
+        <section class="inceleme-bolum rol-secimi">
+          <h3>Onaylanınca rolü</h3>
+          <div class="segment" role="radiogroup" aria-label="Rol">
+            <label><input type="radio" name="onayTur" value="mezun" ${ogretmen(k) ? '' : 'checked'}><span>${ikon('kep', 'kucuk')} Mezun</span></label>
+            <label><input type="radio" name="onayTur" value="ogretmen" ${ogretmen(k) ? 'checked' : ''}><span>${ikon('ogretmen', 'kucuk')} Öğretmen</span></label>
+          </div>
+          <div class="alan rol-brans" data-zorunlu ${ogretmen(k) ? '' : 'hidden'}>
+            <div class="alan-bas"><label for="onay-brans">Branş <span class="zorunlu" aria-hidden="true">*</span></label></div>
+            <input id="onay-brans" name="onayBrans" list="onay-brans-listesi" value="${esc(k.brans || '')}" placeholder="Örn. Kimya" maxlength="80">
+            <datalist id="onay-brans-listesi">${BRANSLAR.map(b => `<option value="${b}">`).join('')}</datalist>
+            <em class="alan-hata" data-hata="onayBrans"></em>
+          </div>
+          <p class="soluk kucuk-yazi">Öğretmen olarak kayıt olup yanlışlıkla mezun başvurusu yapanlar için “Öğretmen”i seçin.</p>
+        </section>
         <section class="inceleme-bolum">
           <h3>Başvuru ve onay</h3>
           <dl class="tanim-listesi">
@@ -1547,6 +1560,65 @@
         : `<button class="dugme tehlike-cerceve" data-ac="reddet" data-id="${k.id}">${ikon('kapat')}<span>Reddet</span></button>
           <button class="dugme ikincil" data-ac="basvuru-duzenle" data-id="${k.id}">${ikon('kalem')}<span>Düzenle</span></button>
           <button class="dugme" data-ac="onayla" data-id="${k.id}">${ikon('tamam')}<span>Onayla</span></button>`
+    });
+    const bransAlani = $katman.querySelector('.rol-brans');
+    $katman.querySelectorAll('[name="onayTur"]').forEach(r => r.addEventListener('change', () => {
+      bransAlani.hidden = r.value !== 'ogretmen' || !r.checked;
+      if (!bransAlani.hidden) bransAlani.querySelector('input').focus();
+    }));
+  }
+
+  // Onay çekmecesindeki rol seçimini okur; öğretmen için branş zorunludur.
+  function onayRolu() {
+    const secili = $katman.querySelector('[name="onayTur"]:checked');
+    if (!secili) return {};
+    if (secili.value !== 'ogretmen') return { tur: 'mezun' };
+    const girdi = $katman.querySelector('[name="onayBrans"]');
+    const brans = OFL.yaziDuzelt(girdi.value.trim());
+    const hata = $katman.querySelector('[data-hata="onayBrans"]');
+    hata.textContent = brans ? '' : 'Öğretmen için branş yazın.';
+    if (brans) girdi.removeAttribute('aria-invalid'); else girdi.setAttribute('aria-invalid', 'true');
+    if (!brans) { girdi.focus(); return null; }
+    return { tur: 'ogretmen', brans };
+  }
+
+  // Red penceresi: sebep yazılır, istenirse başvurana e-postayla iletilir.
+  function redSebebiIste(ad) {
+    return new Promise(coz => {
+      const odak = document.activeElement;
+      $onay.innerHTML = `<div class="perde"></div>
+        <form class="diyalog genis-diyalog" role="dialog" aria-modal="true" aria-label="Başvuruyu reddet">
+          <h3>Başvuruyu reddet</h3>
+          <p class="soluk kucuk-yazi">${esc(ad)} adlı kişinin başvurusu reddedilecek. Yanlışlıkla reddederseniz “Reddedilenler” sekmesinden 30 gün içinde geri alabilirsiniz.</p>
+          <div class="alan">
+            <label for="red-sebebi">Red sebebi</label>
+            <textarea id="red-sebebi" name="sebep" rows="4" maxlength="1000" placeholder="Örn. Mezuniyet yılı okul kayıtlarımızla uyuşmuyor. Bilgilerinizi kontrol ederek yeniden başvurabilirsiniz."></textarea>
+            <em class="alan-hata" data-hata="sebep"></em>
+          </div>
+          <label class="onay-kutusu"><input type="checkbox" name="bildir" checked><span>Red sebebini başvurana e-postayla gönder</span></label>
+          <div class="diyalog-dugmeleri">
+            <button type="button" class="dugme ikincil" data-onay="hayir">Vazgeç</button>
+            <button type="submit" class="dugme tehlike">Reddet</button>
+          </div>
+        </form>`;
+      $onay.classList.add('acik');
+      const f = $onay.querySelector('form');
+      f.sebep.focus();
+      const bitir = d => {
+        $onay.classList.remove('acik'); $onay.innerHTML = ''; $onay.onclick = null;
+        if (odak && document.contains(odak)) odak.focus({ preventScroll: true });
+        coz(d);
+      };
+      f.addEventListener('submit', ev => {
+        ev.preventDefault();
+        const sebep = f.sebep.value.trim();
+        if (f.bildir.checked && sebep.length < 5) {
+          f.querySelector('[data-hata="sebep"]').textContent = 'E-postayla gönderilecekse kısa bir sebep yazın.';
+          return f.sebep.focus();
+        }
+        bitir({ sebep, bildir: f.bildir.checked });
+      });
+      $onay.onclick = ev => { if (ev.target.closest('[data-onay="hayir"]') || ev.target.classList.contains('perde')) bitir(null); };
     });
   }
 
@@ -2309,18 +2381,28 @@
       case 'sekme':
         S.basvuruSekmesi = el.dataset.sekme;
         return basvurularEkrani().catch(hataGoster);
-      case 'onayla':
+      case 'onayla': {
+        const rol = onayRolu();
+        if (rol === null) return;
         try {
           el.disabled = true;
-          await Api.onayla(id);
-          bildir('Başvuru onaylandı. Kişiye e-posta gönderildi; artık giriş yapabilir.', 'basarili');
+          await Api.onayla(id, rol.tur, rol.brans);
+          bildir(`Başvuru ${rol.tur === 'ogretmen' ? 'öğretmen olarak ' : ''}onaylandı. Kişiye e-posta gönderildi; artık giriş yapabilir.`, 'basarili');
           yonlendir();
         } catch (e) { el.disabled = false; hataGoster(e); }
         return;
-      case 'reddet':
-        if (!await onayIste('Bu başvuru reddedilecek. Yanlışlıkla reddederseniz “Reddedilenler” sekmesinden 30 gün içinde geri alabilirsiniz.', 'Başvuruyu reddet', true)) return;
-        try { await Api.reddet(id); bildir('Başvuru reddedildi. “Reddedilenler” sekmesinden geri alabilirsiniz.'); yonlendir(); } catch (e) { hataGoster(e); }
+      }
+      case 'reddet': {
+        const baslik = $katman.querySelector('.cekmece-bas h2');
+        const red = await redSebebiIste(baslik ? baslik.firstChild.textContent.trim() : 'Bu kişi');
+        if (!red) return;
+        try {
+          const r = await Api.reddet(id, red.sebep, red.bildir);
+          bildir('Başvuru reddedildi' + (r && r.bildirildi ? ' ve sebebi kişiye e-postayla gönderildi' : '') + '. “Reddedilenler” sekmesinden geri alabilirsiniz.');
+          yonlendir();
+        } catch (e) { hataGoster(e); }
         return;
+      }
       case 'csv': return csvIndir();
       case 'sifirla':
         if (!await onayIste('Demo verileri ilk haline döner ve oturumunuz kapanır.', 'Sıfırla', true)) return;
