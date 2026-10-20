@@ -1351,10 +1351,10 @@
     yer.innerHTML = `<h3>Giriş şifresi</h3>
       <div class="bilgi-satiri"><span class="bilgi-ikon">${ikon('anahtar')}</span><div class="bilgi-govde">
         <span class="bilgi-deger">${m.sifreVar ? 'Şifre tanımlı' : 'Şifre yok — e-posta koduyla giriş yapıyor'}</span></div></div>
-      <p class="soluk kucuk-yazi">Kişi şifresini unuttuysa giriş ekranındaki “Şifremi unuttum” bağlantısıyla kendisi de yenileyebilir. Gerekirse buradan sıfırlayabilir veya geçici şifre verebilirsiniz.</p>
+      <p class="soluk kucuk-yazi">Giriş yapamıyorsa yeni bir geçici şifre atayıp WhatsApp ile gönderebilirsiniz; varsa eski şifresi geçersiz olur ve ilk girişte kendi şifresini belirler. Kişi “Şifremi unuttum” bağlantısıyla kendisi de yenileyebilir.</p>
       <div class="sifre-eylemleri">
-        ${m.sifreVar ? `<button class="dugme ikincil kucuk" data-ac="sifre-sifirla" data-id="${k.id}">${ikon('yenile')}<span>Şifreyi sıfırla</span></button>` : ''}
-        <button class="dugme ikincil kucuk" data-ac="sifre-ver" data-id="${k.id}">${ikon('anahtar')}<span>Geçici şifre ver</span></button>
+        <button class="dugme kucuk" data-ac="sifre-ver" data-id="${k.id}">${ikon('anahtar')}<span>Yeni şifre ata ve WhatsApp ile gönder</span></button>
+        ${m.sifreVar ? `<button class="dugme ikincil kucuk" data-ac="sifre-sifirla" data-id="${k.id}">${ikon('yenile')}<span>Şifreyi kaldır (e-posta koduyla girsin)</span></button>` : ''}
       </div>`;
   }
 
@@ -1368,17 +1368,17 @@
     const k = await kayitGetir(id).catch(() => null);
     const ad = k ? adSoyad(k) : 'Kişi';
     if (islem === 'sifirla') {
-      if (!await onayIste(`${ad} kişisinin şifresi kaldırılacak. Bir sonraki girişini e-posta koduyla yapıp yeni şifre belirleyebilecek. Kişiye bilgi e-postası gider.`, 'Şifreyi sıfırla', true)) return;
-      try { await Api.kullaniciSifre(id, 'sifirla'); bildir('Şifre sıfırlandı.', 'basarili'); if (k) sifreBolumunuDoldur(k); }
+      if (!await onayIste(`${ad} kişisinin şifresi kaldırılacak. Bir sonraki girişini e-posta koduyla yapıp yeni şifre belirleyebilecek. Kişiye bilgi e-postası gider.`, 'Şifreyi kaldır', true)) return;
+      try { await Api.kullaniciSifre(id, 'sifirla'); bildir('Şifre kaldırıldı.', 'basarili'); if (k) sifreBolumunuDoldur(k); }
       catch (e) { hataGoster(e); }
       return;
     }
-    const sifre = await girdiIste(`${ad} için geçici şifre`, 'Bu şifreyi kişiye siz iletin (telefon, WhatsApp vb.). Kişi bu şifreyle ilk girişinde kendi şifresini belirlemek zorunda kalır. Şifre 7 gün geçerlidir.', geciciSifreUret());
+    const sifre = await girdiIste(`${ad} için yeni şifre`, 'Aşağıdaki geçici şifre atanacak; varsa eski şifresi geçersiz olur. Sonraki adımda WhatsApp ile gönderebilirsiniz. Kişi ilk girişte kendi şifresini belirler; şifre 7 gün geçerlidir.', geciciSifreUret());
     if (!sifre) return;
     try {
       const r = await Api.kullaniciSifre(id, 'belirle', sifre);
       if (k) sifreBolumunuDoldur(k);
-      sifrePaylas({ ad: (r && r.ad) || (k && k.ad) || '', eposta: (r && r.eposta) || (k && k.eposta) || '', telefon: (r && r.telefon) || (k && k.telefon) || '' }, sifre, 'Geçici şifre tanımlandı');
+      sifrePaylas({ ad: (r && r.ad) || (k && k.ad) || '', eposta: (r && r.eposta) || (k && k.eposta) || '', telefon: (r && r.telefon) || (k && k.telefon) || '' }, sifre, 'Yeni şifre atandı', 'yeni');
     } catch (e) { hataGoster(e); }
   }
 
@@ -1391,29 +1391,32 @@
     return d.length >= 11 ? d : '';
   }
 
-  function sifreMesaji(k, sifre) {
-    return `Merhaba ${k.ad || ''},\n\n${OFL.OKUL_ADI} mezun ağı OFL Connect kaydınız onaylandı. Giriş bilgileriniz:\n\n` +
+  function sifreMesaji(k, sifre, tip) {
+    const giris = tip === 'yeni' ? `OFL Connect hesabınız için yeni bir geçici şifre tanımlandı. Giriş bilgileriniz:`
+      : `${OFL.OKUL_ADI} mezun ağı OFL Connect kaydınız onaylandı. Giriş bilgileriniz:`;
+    return `Merhaba ${k.ad || ''},\n\n${giris}\n\n` +
       `Adres: ${location.origin}${location.pathname}#/sifre\nE-posta: ${k.eposta}\nGeçici şifre: ${sifre}\n\n` +
       `Giriş ekranında "Şifre" sekmesini seçin. İlk girişte kendi şifrenizi belirlemeniz istenecek. Geçici şifre 7 gün geçerlidir.`;
   }
 
   // Onaydan veya geçici şifre verdikten sonra: şifreyi göster, WhatsApp ile paylaş.
-  function sifrePaylas(k, sifre, baslik) {
+  function sifrePaylas(k, sifre, baslik, tip) {
     return new Promise(coz => {
       const odak = document.activeElement;
       const no = whatsappNumarasi(k.telefon);
-      const mesaj = sifreMesaji(k, sifre);
+      const mesaj = sifreMesaji(k, sifre, tip);
       $onay.innerHTML = `<div class="perde"></div>
         <div class="diyalog genis-diyalog sifre-paylas" role="dialog" aria-modal="true" aria-label="${esc(baslik)}">
           <h3>${ikon('tamam', 'kucuk')} ${esc(baslik)}</h3>
-          <p class="soluk kucuk-yazi">${esc(k.ad || 'Kişi')} için geçici şifre. Kişiye iletin; ilk girişte kendi şifresini belirleyecek. Şifre 7 gün geçerlidir.</p>
+          <p class="soluk kucuk-yazi">${esc(k.ad || 'Kişi')} için geçici şifre. İlk girişte kendi şifresini belirleyecek; şifre 7 gün geçerlidir.</p>
+          <p class="bilgi-kutu uyari-kutu">${ikon('bilgi')}<span><strong>Şifre kişiye henüz gönderilmedi.</strong> “WhatsApp ile gönder”e basın, açılan WhatsApp sohbetinde de gönder okuna dokunun.</span></p>
           <div class="kopyala-alan sifre-kutu"><code>${esc(sifre)}</code>
             <button type="button" class="ikon-dugme kucuk" data-kopyala="sifre" aria-label="Şifreyi kopyala">${ikon('kopyala')}</button></div>
           ${no ? `<a class="dugme whatsapp-dugme genis" href="https://wa.me/${no}?text=${encodeURIComponent(mesaj)}" target="_blank" rel="noopener">${ikon('mesaj')}<span>WhatsApp ile gönder · ${esc(k.telefon)}</span></a>`
             : `<p class="bilgi-kutu uyari-kutu">${ikon('bilgi')}<span>Kayıtta geçerli bir telefon numarası yok. Mesajı kopyalayıp kişiye başka bir yolla iletin.</span></p>`}
           <div class="diyalog-dugmeleri">
             <button type="button" class="dugme ikincil" data-kopyala="mesaj">${ikon('kopyala')}<span>Mesajı kopyala</span></button>
-            <button type="button" class="dugme" data-onay="tamam">Tamam</button>
+            <button type="button" class="dugme ikincil" data-onay="tamam">Kapat</button>
           </div>
         </div>`;
       $onay.classList.add('acik');
@@ -1447,7 +1450,7 @@
             <em class="alan-hata" data-hata="deger"></em></div>
           <div class="diyalog-dugmeleri">
             <button type="button" class="dugme ikincil" data-onay="hayir">Vazgeç</button>
-            <button type="submit" class="dugme">Kaydet</button>
+            <button type="submit" class="dugme">Şifreyi ata</button>
           </div>
         </form>`;
       $onay.classList.add('acik');
