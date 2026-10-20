@@ -1,7 +1,7 @@
 /* OFL Connect — service worker: uygulama kabuğunu önbelleğe alır (uygulama ana ekrandan
    anında açılır) ve duyuru bildirimlerini gösterir. Sürüm numarasını her yayında artırın
    ki kullanıcılar yeni dosyaları alsın. */
-const SURUM = 'ofl-connect-v8';
+const SURUM = 'ofl-connect-v9';
 const KABUK = ['./', 'index.html', 'styles.css', 'config.js', 'ortak.js', 'api.js', 'data.js', 'app.js', 'manifest.json',
   'icons/ofl-logo.png', 'icons/favicon-64.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
@@ -65,16 +65,33 @@ async function sonDuyuru() {
   } catch (e) { return null; }
 }
 
+// Sunucu, bu kullanıcı için gösterilecek en yeni olayı (yöneticiye yeni başvuru ya da duyuru) söyler.
+async function bildirimIcerigi() {
+  const o = await oturumOku();
+  if (!o || !o.token || !o.api) return null;
+  try {
+    const r = await fetch(o.api, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ islem: 'bildirimIcerigi', veri: {}, token: o.token })
+    });
+    const y = await r.json();
+    return y.ok ? (y.veri || null) : undefined;
+  } catch (e) { return undefined; }
+}
+
 self.addEventListener('push', e => {
   e.waitUntil((async () => {
-    const d = await sonDuyuru();
-    const metin = d ? String(d.metin || '').replace(/\s+/g, ' ').slice(0, 140) : 'Okul yönetimi yeni bir duyuru yayınladı. Görmek için dokunun.';
-    await self.registration.showNotification(d ? (d.tur === 'onemli' ? 'Önemli: ' : '') + d.baslik : 'OFL Connect — Yeni duyuru', {
-      body: metin,
+    let b = await bildirimIcerigi();
+    if (b === undefined) {
+      const d = await sonDuyuru();
+      if (d) b = { baslik: (d.tur === 'onemli' ? 'Önemli: ' : '') + d.baslik, metin: String(d.metin || '').replace(/\s+/g, ' ').slice(0, 140), url: './#/duyurular', etiket: 'duyuru-' + d.id };
+    }
+    await self.registration.showNotification(b ? b.baslik : 'OFL Connect', {
+      body: b ? b.metin : 'Yeni bir bildiriminiz var. Görmek için dokunun.',
       icon: 'icons/icon-192.png',
       badge: 'icons/favicon-64.png',
-      tag: d ? 'duyuru-' + d.id : 'duyuru',
-      data: { url: './#/duyurular' }
+      tag: b ? b.etiket : 'ofl',
+      data: { url: b ? b.url : './#/' }
     });
   })());
 });

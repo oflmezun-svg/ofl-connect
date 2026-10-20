@@ -876,19 +876,21 @@
     const z = kati;
     const calisma = k.calisma || '';
     const dugmeYazisi = { kayit: 'Başvurumu gönder', yeni: 'Kullanıcıyı ekle', profil: 'Değişiklikleri kaydet', admin: 'Kaydet' }[mod];
-    const kim = (mezunYazi, ogretmenYazi) => mod === 'yeni'
+    const turSecilir = mod === 'yeni' || mod === 'admin';
+    const kim = (mezunYazi, ogretmenYazi) => turSecilir
       ? `<span class="sadece-mezun">${mezunYazi}</span><span class="sadece-ogretmen">${ogretmenYazi}</span>`
       : (tur === 'ogretmen' ? ogretmenYazi : mezunYazi);
     const sehirYurtDisi = k.sehir && !OFL.SEHIRLER.includes(k.sehir) ? k.sehir : '';
 
-    const turSecimi = mod === 'yeni' ? `
+    const turSecimi = turSecilir ? `
       <fieldset class="form-bolum">
         <legend>Kullanıcı türü</legend>
         <div class="segment" role="radiogroup" aria-label="Kullanıcı türü">
-          <label><input type="radio" name="tur" value="mezun" checked><span>${ikon('kep', 'kucuk')} Mezun</span></label>
-          <label><input type="radio" name="tur" value="ogretmen"><span>${ikon('ogretmen', 'kucuk')} Öğretmen</span></label>
+          <label><input type="radio" name="tur" value="mezun" ${tur === 'mezun' ? 'checked' : ''}><span>${ikon('kep', 'kucuk')} Mezun</span></label>
+          <label><input type="radio" name="tur" value="ogretmen" ${tur === 'ogretmen' ? 'checked' : ''}><span>${ikon('ogretmen', 'kucuk')} Öğretmen</span></label>
         </div>
-        <p class="bolum-not">${kim(
+        ${mod === 'admin' ? `<p class="bolum-not">${ikon('bilgi', 'kucuk')} Yanlış türle kayıt olan kişiyi buradan mezun ya da öğretmen yapabilirsiniz. Öğretmen için branş zorunludur.</p>` : ''}
+        <p class="bolum-not" ${mod === 'admin' ? 'hidden' : ''}>${kim(
           `${ikon('bilgi', 'kucuk')} Yöneticinin eklediği mezun doğrudan onaylanır. Mezunun açık rızasını ayrıca almayı unutmayın.`,
           `${ikon('bilgi', 'kucuk')} Öğretmenler rehberde “Öğretmen” etiketiyle görünür ve mezunlarla aynı haklara sahiptir: rehberi görür, duyuruları alır, yalnızca kendi bilgisini düzenler.`)}</p>
       </fieldset>` : '';
@@ -1483,11 +1485,19 @@
       bas: `<div><h2>Bilgileri düzenle</h2><p class="soluk">${esc(adSoyad(k))} · ${esc(kimlikYazisi(k))}</p></div>`,
       govde: profilFormu(k, 'admin')
     });
+    turDegisiminiBagla($katman.querySelector('form'));
     formuBagla($katman.querySelector('form'), async v => {
       await Api.profilKaydet(id, v);
       bildir('Kayıt güncellendi.', 'basarili');
       if (sonra) sonra(); else yonlendir();
     });
+  }
+
+  function turDegisiminiBagla(f) {
+    f.querySelectorAll('input[name="tur"]').forEach(r => r.addEventListener('change', () => {
+      f.dataset.tur = f.elements.tur.value;
+      if (f.elements.tur.value === 'ogretmen' && !f.elements.meslek.value) f.elements.meslek.placeholder = 'Örn. Kimya Öğretmeni';
+    }));
   }
 
   function kullaniciEkle() {
@@ -1497,10 +1507,7 @@
       govde: profilFormu(null, 'yeni')
     });
     const f = $katman.querySelector('form');
-    f.querySelectorAll('input[name="tur"]').forEach(r => r.addEventListener('change', () => {
-      f.dataset.tur = f.elements.tur.value;
-      if (f.elements.tur.value === 'ogretmen' && !f.elements.meslek.value) f.elements.meslek.placeholder = 'Örn. Kimya Öğretmeni';
-    }));
+    turDegisiminiBagla(f);
     formuBagla(f, async v => {
       const r = await Api.kullaniciEkle(v);
       const kim = v.tur === 'ogretmen' ? 'Öğretmen' : 'Mezun';
@@ -1634,7 +1641,7 @@
 
     const sekmeDugmesi = (ad, yazi, n) => `<button role="tab" class="sekme ${sekme === ad ? 'aktif' : ''}" aria-selected="${sekme === ad}" data-ac="sekme" data-sekme="${ad}">${yazi} <span class="sayac">${n}</span></button>`;
     ic.innerHTML = `
-      ${sayfaBasi('Başvurular', alt)}
+      ${sayfaBasi('Başvurular', alt)}${bildirimKarti()}
       <div class="sekmeler" role="tablist">
         ${sekmeDugmesi('onay', 'Onay bekleyenler', bekleyen.length)}${sekmeDugmesi('red', 'Reddedilenler', red.length)}${sekmeDugmesi('silme', 'Silme talepleri', silme.length)}
       </div>
@@ -2209,12 +2216,17 @@
   // Duyurular sayfasının üstündeki küçük bilgi kartı
   function bildirimKarti() {
     const d = bildirimDurumu();
+    const admin = S.oturum && S.oturum.rol === 'admin';
     if (d === 'yok' || d === 'granted') return d === 'granted'
-      ? `<div class="bildirim-karti acik" id="bildirim-karti">${ikon('zil')}<span><strong>Telefon bildirimleri açık.</strong> Yeni duyurular bu cihaza bildirim olarak gelir.</span></div>` : '';
+      ? `<div class="bildirim-karti acik" id="bildirim-karti">${ikon('zil')}<span><strong>Telefon bildirimleri açık.</strong> ${admin
+        ? 'Yeni başvurular ve duyurular bu cihaza bildirim olarak gelir. Bildirimde ayrıntı görünmesi için girişte “oturumum açık kalsın” seçili olmalı.'
+        : 'Yeni duyurular bu cihaza bildirim olarak gelir.'}</span></div>` : '';
     const metin = {
-      kurulum: 'Duyuruları telefon bildirimi olarak almak için önce OFL Connect\'i ana ekranınıza ekleyin.',
+      kurulum: admin ? 'Yeni başvuruları telefon bildirimi olarak almak için önce OFL Connect\'i ana ekranınıza ekleyin.'
+        : 'Duyuruları telefon bildirimi olarak almak için önce OFL Connect\'i ana ekranınıza ekleyin.',
       denied: 'Bildirim izni kapalı. Telefonunuzun ayarlarından OFL Connect (veya tarayıcınız) için bildirimlere izin verin.',
-      default: 'Yeni duyuruları kaçırmamak için telefon bildirimlerini açın.'
+      default: admin ? 'Yeni bir başvuru geldiğinde haberiniz olsun: bu cihazda telefon bildirimlerini açın.'
+        : 'Yeni duyuruları kaçırmamak için telefon bildirimlerini açın.'
     }[d];
     const dugme = d === 'kurulum' ? `<button class="dugme kucuk" data-ac="kurulum-rehberi">${ikon('oynat', 'kucuk')}<span>Nasıl eklenir?</span></button>`
       : d === 'default' ? `<button class="dugme kucuk" data-ac="bildirim-ac">${ikon('zil', 'kucuk')}<span>Bildirimleri aç</span></button>` : '';
@@ -2229,8 +2241,10 @@
     yerelDepo('ofl-bildirim-teklifi', Date.now());
     cekmeceAc({
       etiket: 'Duyuru bildirimleri', orta: true,
-      bas: `<div data-bildirim-teklifi><span class="ust-etiket">${ikon('zil', 'kucuk')} Bildirimler</span><h2>Duyurular telefonunuza gelsin mi?</h2></div>`,
-      govde: `<p>Okul yönetimi yeni bir duyuru yayınladığında telefonunuza bildirim gelsin. Bildirimler yalnızca duyurular içindir; istediğiniz zaman kapatabilirsiniz.</p>`,
+      bas: `<div data-bildirim-teklifi><span class="ust-etiket">${ikon('zil', 'kucuk')} Bildirimler</span><h2>${S.oturum.rol === 'admin' ? 'Yeni başvurular telefonunuza gelsin mi?' : 'Duyurular telefonunuza gelsin mi?'}</h2></div>`,
+      govde: S.oturum.rol === 'admin'
+        ? `<p>Yeni bir kayıt başvurusu onay beklediğinde ve duyuru yayınlandığında bu cihaza bildirim gelsin. İstediğiniz zaman kapatabilirsiniz.</p>`
+        : `<p>Okul yönetimi yeni bir duyuru yayınladığında telefonunuza bildirim gelsin. Bildirimler yalnızca duyurular içindir; istediğiniz zaman kapatabilirsiniz.</p>`,
       alt: `<button class="dugme ikincil" data-ac="kapat">Şimdi değil</button><button class="dugme" data-ac="bildirim-ac">${ikon('zil')}<span>Bildirimleri aç</span></button>`
     });
     return true;

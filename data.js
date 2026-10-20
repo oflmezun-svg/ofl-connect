@@ -600,14 +600,20 @@
       const k = bul(id);
       if (!k) throw hata('Kayıt bulunamadı.');
       await bekle(300);
-      const { temiz, hatalar } = dogrula(Object.assign({}, veri, { tur: k.tur }), o.rol !== 'admin');
+      const yeniTur = o.rol === 'admin' && (veri.tur === 'ogretmen' || veri.tur === 'mezun') ? veri.tur : k.tur;
+      const { temiz, hatalar } = dogrula(Object.assign({}, veri, { tur: yeniTur }), o.rol !== 'admin');
       if (!hatalar.eposta && epostaKullanimda(temiz.eposta, id)) hatalar.eposta = 'Bu e-posta başka bir kayıtta kullanılıyor.';
       if (Object.keys(hatalar).length) throw dogrulamaHatasi(hatalar);
       if (temiz.eposta !== k.eposta && D.sifreler[k.eposta]) {
         D.sifreler[temiz.eposta] = D.sifreler[k.eposta];
         delete D.sifreler[k.eposta];
       }
-      Object.assign(k, temiz, { guncelleme: new Date().toISOString() });
+      const turDegisti = yeniTur !== k.tur;
+      Object.assign(k, temiz, { tur: yeniTur, guncelleme: new Date().toISOString() });
+      if (yeniTur === 'ogretmen') {
+        k.calisma = '';
+        if (turDegisti && !/[öÖoO][ğĞgG]retmen/i.test(k.meslek || '')) k.meslek = k.brans + ' Öğretmeni';
+      }
       kaydet();
       return maskele(k, o);
     },
