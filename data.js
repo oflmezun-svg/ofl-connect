@@ -492,6 +492,8 @@
         throw hata('E-posta veya şifre hatalı. Kalan deneme hakkı: ' + Math.max(0, 4 - say));
       }
       delete sifreDenemeleri[eposta];
+      const verildi = D.degistirmeli[eposta];
+      if (typeof verildi === 'number' && Date.now() - verildi > 7 * 864e5) throw hata('Geçici şifrenizin süresi doldu (7 gün). Okul yönetiminden yeni şifre isteyin ya da e-posta koduyla giriş yapın.');
       return Object.assign(oturumAc(eposta, hedef, hatirla), { degistirmeli: !!D.degistirmeli[eposta] });
     },
 
@@ -517,16 +519,16 @@
       const k = bul(id);
       if (!k) throw hata('Kayıt bulunamadı.');
       if (islem === 'belirle') {
-        if (String(sifre || '').length < 6) throw dogrulamaHatasi({ sifre: 'Şifre en az 6 karakter olmalıdır.' });
+        if (String(sifre || '').length < 8) throw dogrulamaHatasi({ sifre: 'Geçici şifre en az 8 karakter olmalıdır.' });
         D.sifreler[k.eposta] = String(sifre);
-        D.degistirmeli[k.eposta] = true;
+        D.degistirmeli[k.eposta] = Date.now();
       } else {
         delete D.sifreler[k.eposta];
         delete D.degistirmeli[k.eposta];
       }
       delete sifreDenemeleri[k.eposta];
       kaydet();
-      return { sifreVar: islem === 'belirle' };
+      return { sifreVar: islem === 'belirle', telefon: k.telefon, eposta: k.eposta, ad: k.ad };
     },
 
     async sifreBelirle(sifre) {
@@ -738,7 +740,7 @@
       return D.kayitlar.filter(k => k.silmeTalebi).map(k => maskele(k, o));
     },
 
-    async onayla(id, tur, brans) {
+    async onayla(id, tur, brans, sifre) {
       yetkiGerekli('admin');
       const k = bul(id);
       if (!k) throw hata('Kayıt bulunamadı.');
@@ -749,9 +751,24 @@
         k.tur = 'ogretmen'; k.brans = brans; k.calisma = '';
         if (!/[öÖoO][ğĞgG]retmen/i.test(k.meslek || '')) k.meslek = brans + ' Öğretmeni';
       } else if (tur === 'mezun') k.tur = 'mezun';
+      if (sifre && String(sifre).length < 8) throw dogrulamaHatasi({ sifre: 'Geçici şifre en az 8 karakter olmalıdır.' });
+      if (sifre) { D.sifreler[k.eposta] = String(sifre); D.degistirmeli[k.eposta] = Date.now(); delete sifreDenemeleri[k.eposta]; }
       k.durum = 'onayli';
       k.redTarihi = null;
       kaydet();
+      return { durum: 'onayli', geciciSifre: !!sifre, telefon: k.telefon, eposta: k.eposta, ad: k.ad };
+    },
+
+    // Demoda mezun listesi yok; kontrol sonucu kayda göre taklit edilir.
+    async basvuruKontrol(id) {
+      yetkiGerekli('admin');
+      await bekle(400);
+      const k = bul(id);
+      if (!k) throw hata('Kayıt bulunamadı.');
+      const n = [...k.id].reduce((a, c) => a + c.charCodeAt(0), 0) % 3;
+      return n === 0 ? { listede: true, listeAd: k.ad + ' ' + k.soyad, telefonEslesiyor: true, telefonListedeBaskasi: '' }
+        : n === 1 ? { listede: true, listeAd: k.ad + ' ' + k.soyad, telefonEslesiyor: false, telefonListedeBaskasi: '' }
+        : { listede: false, listeAd: '', telefonEslesiyor: null, telefonListedeBaskasi: '' };
     },
 
     async reddet(id, sebep, bildir) {
@@ -766,6 +783,13 @@
       kaydet();
       // Demoda e-posta gönderilmez; gerçek sistemde sebep başvurana iletilir.
       return { durum: k.durum, bildirildi: !!bildir };
+    },
+
+    async destekGonder(v) {
+      await bekle(300);
+      if (!v || !v.ad || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.eposta || '') || String(v.mesaj || '').trim().length < 10) throw hata('Lütfen formu eksiksiz doldurun.');
+      // Demoda mesaj gönderilmez; gerçek sistemde okulun e-posta adresine iletilir.
+      return { ok: true };
     },
 
     async reddedilenler() {

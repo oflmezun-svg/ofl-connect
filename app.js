@@ -246,7 +246,7 @@
     cekmeceKapat('rota');
     const yol = location.hash.replace(/^#\/?/, '');
     S.oturum = Api.oturum();
-    if (!S.oturum) { S.gecmis = []; S.sonYol = ''; return yol === 'kayit' ? kayitEkrani() : girisEkrani(); }
+    if (!S.oturum) { S.gecmis = []; S.sonYol = ''; return yol === 'kayit' ? kayitEkrani() : girisEkrani(yol === 'sifre' ? 'sifre' : undefined); }
     // Uygulama içi geri yığını. Her sayfa adımına sıra numarası verilir; böylece tarayıcının/telefonun
     // geri tuşuyla mı dönüldüğü yoksa yeni bir sayfaya mı gidildiği kesin olarak anlaşılır.
     S.gecmis = S.gecmis || [];
@@ -376,7 +376,8 @@
   function girisEkrani(kip) {
     const hesap = Api.hesap();
     // Şifresi olan hatırlanan hesap: e-posta sabit, yalnızca şifre sorulur (banka uygulamaları gibi).
-    const sifreKipi = kip !== 'kod' && hesap && hesap.sifreVar && hesap.eposta;
+    const sifreKipi = kip !== 'kod' && kip !== 'sifre' && hesap && hesap.sifreVar && hesap.eposta;
+    const sifreSekmesi = kip === 'sifre';
     const ilkAd = hesap && hesap.ad ? hesap.ad.split(' ')[0] : '';
 
     $app.innerHTML = `
@@ -407,9 +408,29 @@
                 <button class="dugme metin" type="button" data-giris-ac="farkli">Farklı hesapla giriş yap</button>
               </div>` : `
               <h2>Giriş yap</h2>
-              <p class="soluk">E-posta adresinize tek kullanımlık bir giriş kodu göndereceğiz. Giriş yaptıktan sonra isterseniz bir şifre belirleyip sonraki girişlerde onu kullanabilirsiniz.</p>
+              <div class="segment giris-sekmeleri" role="radiogroup" aria-label="Giriş yöntemi">
+                <label><input type="radio" name="girisYolu" value="kod" ${sifreSekmesi ? '' : 'checked'}><span>${ikon('eposta', 'kucuk')} E-posta kodu</span></label>
+                <label><input type="radio" name="girisYolu" value="sifre" ${sifreSekmesi ? 'checked' : ''}><span>${ikon('anahtar', 'kucuk')} Şifre</span></label>
+              </div>
+              <p class="soluk" data-giris-yazi="kod" ${sifreSekmesi ? 'hidden' : ''}>E-posta adresinize tek kullanımlık bir giriş kodu göndereceğiz. Giriş yaptıktan sonra isterseniz bir şifre belirleyip sonraki girişlerde onu kullanabilirsiniz.</p>
+              <p class="soluk" data-giris-yazi="sifre" ${sifreSekmesi ? '' : 'hidden'}>Kendi belirlediğiniz şifreyle ya da okul yönetiminin size ilettiği geçici şifreyle giriş yapın.</p>
 
-              <form id="f-eposta" class="form" novalidate>
+              <form id="f-eposta-sifre" class="form" novalidate ${sifreSekmesi ? '' : 'hidden'}>
+                <div class="alan"><label for="gs-eposta">E-posta adresi</label>
+                  <input id="gs-eposta" type="email" name="eposta" value="${esc(hesap && hesap.eposta || '')}" autocomplete="username" inputmode="email" placeholder="ornek@gmail.com" required>
+                </div>
+                <div class="alan"><label for="gs-sifre">Şifre</label>
+                  <div class="sifre-girdisi">
+                    <input id="gs-sifre" type="password" name="sifre" autocomplete="current-password" required>
+                    <button type="button" class="ikon-dugme kucuk" data-goster="gs-sifre" aria-label="Şifreyi göster">${ikon('goz')}</button>
+                  </div>
+                </div>
+                ${hatirlaKutusu('gs')}
+                <button class="dugme buyuk genis" type="submit">Giriş yap</button>
+                <button class="dugme metin genis" type="button" data-giris-ac="unuttum-sifre">Şifremi unuttum</button>
+              </form>
+
+              <form id="f-eposta" class="form" novalidate ${sifreSekmesi ? 'hidden' : ''}>
                 <div class="alan"><label for="g-eposta">E-posta adresi</label>
                   <input id="g-eposta" type="email" name="eposta" value="${esc(hesap && hesap.eposta || '')}" autocomplete="email" inputmode="email" placeholder="ornek@gmail.com" required>
                 </div>
@@ -438,12 +459,14 @@
               </div>` : ''}
 
             <p class="giris-kayit">Henüz kaydınız yok mu? <a href="#/kayit">Mezun kaydı oluşturun</a></p>
+            <button class="dugme ikincil genis yardim-dugmesi" type="button" data-giris-ac="yardim">${ikon('mesaj')}<span>Yardım ve sorular</span></button>
           </div>
         </main>
       </div>`;
 
     const girildi = girisTamam;
     const baglan = (ac, f) => { const b = $app.querySelector(`[data-giris-ac="${ac}"]`); if (b) b.addEventListener('click', f); };
+    baglan('yardim', () => yardimFormu());
 
     $app.querySelectorAll('[data-goster]').forEach(b => b.addEventListener('click', () => {
       const g = byId(b.dataset.goster);
@@ -471,6 +494,36 @@
         f.requestSubmit();
       });
       baglan('farkli', () => { Api.hesapUnut(); girisEkrani(); });
+    }
+
+    const fES = byId('f-eposta-sifre');
+    if (fES) {
+      const sekme = yol => {
+        const sifre = yol === 'sifre';
+        fES.hidden = !sifre;
+        byId('f-eposta').hidden = sifre;
+        byId('f-kod').hidden = true;
+        $app.querySelectorAll('[data-giris-yazi]').forEach(p => { p.hidden = p.dataset.girisYazi !== yol; });
+        const hedef = sifre ? (fES.eposta.value ? fES.sifre : fES.eposta) : byId('f-eposta').eposta;
+        hedef.focus();
+      };
+      $app.querySelectorAll('[name="girisYolu"]').forEach(r => r.addEventListener('change', () => {
+        // Bir sekmede yazılan e-posta diğerine taşınır.
+        const e = (r.value === 'sifre' ? byId('f-eposta').eposta : fES.eposta).value;
+        (r.value === 'sifre' ? fES.eposta : byId('f-eposta').eposta).value = e;
+        sekme(r.value);
+      }));
+      fES.addEventListener('submit', async ev => {
+        ev.preventDefault();
+        const eposta = fES.eposta.value.trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(eposta)) { fES.eposta.setAttribute('aria-invalid', 'true'); fES.eposta.focus(); return bildir('Geçerli bir e-posta adresi girin.', 'hata'); }
+        if (!fES.sifre.value) { fES.sifre.setAttribute('aria-invalid', 'true'); fES.sifre.focus(); return bildir('Şifrenizi girin.', 'hata'); }
+        const b = fES.querySelector('button[type=submit]'); b.disabled = true;
+        try { girildi(await Api.sifreIleGiris(eposta, fES.sifre.value, fES.hatirla.checked)); }
+        catch (e) { hataGoster(e); fES.sifre.select(); } finally { b.disabled = false; }
+      });
+      baglan('unuttum-sifre', () => sifreUnuttumEkrani(fES.eposta.value.trim()));
+      if (sifreSekmesi) setTimeout(() => (fES.eposta.value ? fES.sifre : fES.eposta).focus(), 50);
     }
 
     const fE = byId('f-eposta');
@@ -509,6 +562,7 @@
     // yöneticinin verdiği geçici şifreyle girenler kendi şifresini belirlemek zorundadır.
     S.sifreOner = !o.sifreVar && !yerelDepo('ofl-sifre-onerisi-' + o.id);
     S.sifreDegistir = !!o.degistirmeli;
+    S.yeniGiris = true;
     S.acilisYapildi = false;
     S.gecmis = [];
     S.sonYol = '';
@@ -516,6 +570,52 @@
   }
 
   /* ---------- Şifremi unuttum: e-posta → kod → yeni şifre ---------- */
+
+  // Giriş ekranındaki "Yardım ve sorular": mesaj sistemin e-posta adresine iletilir.
+  const YARDIM_KONULARI = ['Giriş yapamıyorum / kod gelmiyor', 'Şifre', 'Kayıt ve onay', 'Bilgilerimi güncelleme', 'Diğer'];
+  function yardimFormu() {
+    const hesap = Api.hesap();
+    cekmeceAc({
+      etiket: 'Yardım ve sorular', orta: true,
+      bas: `<div><span class="ust-etiket">${ikon('mesaj', 'kucuk')} Yardım</span><h2>Size nasıl yardımcı olabiliriz?</h2>
+        <p class="soluk">Mesajınız okul yönetimine iletilir; size e-posta adresinizden dönüş yapılır.</p></div>`,
+      govde: `<form id="f-yardim" class="form" novalidate>
+          <div class="alan" data-zorunlu><div class="alan-bas"><label for="y-ad">Ad soyad <span class="zorunlu" aria-hidden="true">*</span></label></div>
+            <input id="y-ad" name="ad" maxlength="80" autocomplete="name" value="${esc(hesap && hesap.ad || '')}" required><em class="alan-hata" data-hata="ad"></em></div>
+          <div class="alan" data-zorunlu><div class="alan-bas"><label for="y-eposta">E-posta <span class="zorunlu" aria-hidden="true">*</span></label></div>
+            <input id="y-eposta" name="eposta" type="email" inputmode="email" maxlength="120" autocomplete="email" value="${esc(hesap && hesap.eposta || '')}" required><em class="alan-hata" data-hata="eposta"></em></div>
+          <div class="alan"><div class="alan-bas"><label for="y-telefon">Telefon <small class="soluk">(isteğe bağlı)</small></label></div>
+            <input id="y-telefon" name="telefon" type="tel" inputmode="tel" maxlength="20" autocomplete="tel" placeholder="05xx xxx xx xx"></div>
+          <div class="alan" data-zorunlu><div class="alan-bas"><label for="y-konu">Konu <span class="zorunlu" aria-hidden="true">*</span></label></div>
+            <select id="y-konu" name="konu">${YARDIM_KONULARI.map(k => `<option>${k}</option>`).join('')}</select></div>
+          <div class="alan" data-zorunlu><div class="alan-bas"><label for="y-mesaj">Mesajınız <span class="zorunlu" aria-hidden="true">*</span></label></div>
+            <textarea id="y-mesaj" name="mesaj" rows="5" maxlength="2000" placeholder="Yaşadığınız sorunu kısaca anlatın."></textarea><em class="alan-hata" data-hata="mesaj"></em></div>
+          <input name="web" tabindex="-1" autocomplete="off" class="gorunmez" aria-hidden="true">
+        </form>`,
+      alt: `<button class="dugme ikincil" data-ac="kapat">Vazgeç</button><button class="dugme" type="submit" form="f-yardim">${ikon('mesaj')}<span>Gönder</span></button>`
+    });
+    const f = byId('f-yardim');
+    f.addEventListener('submit', async ev => {
+      ev.preventDefault();
+      const v = { ad: f.ad.value.trim(), eposta: f.eposta.value.trim(), telefon: f.telefon.value.trim(), konu: f.konu.value, mesaj: f.mesaj.value.trim(), web: f.web.value };
+      const hatalar = {};
+      if (v.ad.length < 3) hatalar.ad = 'Adınızı ve soyadınızı yazın.';
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.eposta)) hatalar.eposta = 'Geçerli bir e-posta adresi yazın; size buradan dönüş yapılacak.';
+      if (v.mesaj.length < 10) hatalar.mesaj = 'Sorununuzu biraz daha ayrıntılı yazın.';
+      f.querySelectorAll('[data-hata]').forEach(e => { e.textContent = hatalar[e.dataset.hata] || ''; });
+      f.querySelectorAll('input, textarea').forEach(e => { if (hatalar[e.name]) e.setAttribute('aria-invalid', 'true'); else e.removeAttribute('aria-invalid'); });
+      const ilkHata = Object.keys(hatalar)[0];
+      if (ilkHata) return f.elements[ilkHata].focus();
+      const dugme = $katman.querySelector('[form="f-yardim"]');
+      dugme.disabled = true;
+      try {
+        await Api.destekGonder(v);
+        $katman.querySelector('.cekmece-govde').innerHTML = `<div class="bos-durum">${ikon('tamam')}<h3>Mesajınız iletildi</h3>
+          <p class="soluk">Teşekkürler. Okul yönetimi en kısa sürede <strong>${esc(v.eposta)}</strong> adresinize dönüş yapacak.</p></div>`;
+        $katman.querySelector('.cekmece-alt').innerHTML = `<button class="dugme" data-ac="kapat">Tamam</button>`;
+      } catch (e) { dugme.disabled = false; hataGoster(e); }
+    });
+  }
 
   function sifreUnuttumEkrani(eposta) {
     $app.innerHTML = `
@@ -1273,13 +1373,65 @@
       catch (e) { hataGoster(e); }
       return;
     }
-    const sifre = await girdiIste(`${ad} için geçici şifre`, 'Bu şifreyi kişiye siz iletin (telefon, WhatsApp vb.). Kişi bu şifreyle ilk girişinde kendi şifresini belirlemek zorunda kalır.', geciciSifreUret());
+    const sifre = await girdiIste(`${ad} için geçici şifre`, 'Bu şifreyi kişiye siz iletin (telefon, WhatsApp vb.). Kişi bu şifreyle ilk girişinde kendi şifresini belirlemek zorunda kalır. Şifre 7 gün geçerlidir.', geciciSifreUret());
     if (!sifre) return;
     try {
-      await Api.kullaniciSifre(id, 'belirle', sifre);
-      bildir('Geçici şifre tanımlandı. Kişiye iletmeyi unutmayın.', 'basarili');
+      const r = await Api.kullaniciSifre(id, 'belirle', sifre);
       if (k) sifreBolumunuDoldur(k);
+      sifrePaylas({ ad: (r && r.ad) || (k && k.ad) || '', eposta: (r && r.eposta) || (k && k.eposta) || '', telefon: (r && r.telefon) || (k && k.telefon) || '' }, sifre, 'Geçici şifre tanımlandı');
     } catch (e) { hataGoster(e); }
+  }
+
+  // Türkiye numaraları WhatsApp için ülke koduyla yazılır: 0532… → 90532…
+  function whatsappNumarasi(tel) {
+    let d = String(tel || '').replace(/\D/g, '');
+    if (d.startsWith('00')) d = d.slice(2);
+    if (d.length === 11 && d.startsWith('0')) d = '90' + d.slice(1);
+    else if (d.length === 10 && d.startsWith('5')) d = '90' + d;
+    return d.length >= 11 ? d : '';
+  }
+
+  function sifreMesaji(k, sifre) {
+    return `Merhaba ${k.ad || ''},\n\n${OFL.OKUL_ADI} mezun ağı OFL Connect kaydınız onaylandı. Giriş bilgileriniz:\n\n` +
+      `Adres: ${location.origin}${location.pathname}#/sifre\nE-posta: ${k.eposta}\nGeçici şifre: ${sifre}\n\n` +
+      `Giriş ekranında "Şifre" sekmesini seçin. İlk girişte kendi şifrenizi belirlemeniz istenecek. Geçici şifre 7 gün geçerlidir.`;
+  }
+
+  // Onaydan veya geçici şifre verdikten sonra: şifreyi göster, WhatsApp ile paylaş.
+  function sifrePaylas(k, sifre, baslik) {
+    return new Promise(coz => {
+      const odak = document.activeElement;
+      const no = whatsappNumarasi(k.telefon);
+      const mesaj = sifreMesaji(k, sifre);
+      $onay.innerHTML = `<div class="perde"></div>
+        <div class="diyalog genis-diyalog sifre-paylas" role="dialog" aria-modal="true" aria-label="${esc(baslik)}">
+          <h3>${ikon('tamam', 'kucuk')} ${esc(baslik)}</h3>
+          <p class="soluk kucuk-yazi">${esc(k.ad || 'Kişi')} için geçici şifre. Kişiye iletin; ilk girişte kendi şifresini belirleyecek. Şifre 7 gün geçerlidir.</p>
+          <div class="kopyala-alan sifre-kutu"><code>${esc(sifre)}</code>
+            <button type="button" class="ikon-dugme kucuk" data-kopyala="sifre" aria-label="Şifreyi kopyala">${ikon('kopyala')}</button></div>
+          ${no ? `<a class="dugme whatsapp-dugme genis" href="https://wa.me/${no}?text=${encodeURIComponent(mesaj)}" target="_blank" rel="noopener">${ikon('mesaj')}<span>WhatsApp ile gönder · ${esc(k.telefon)}</span></a>`
+            : `<p class="bilgi-kutu uyari-kutu">${ikon('bilgi')}<span>Kayıtta geçerli bir telefon numarası yok. Mesajı kopyalayıp kişiye başka bir yolla iletin.</span></p>`}
+          <div class="diyalog-dugmeleri">
+            <button type="button" class="dugme ikincil" data-kopyala="mesaj">${ikon('kopyala')}<span>Mesajı kopyala</span></button>
+            <button type="button" class="dugme" data-onay="tamam">Tamam</button>
+          </div>
+        </div>`;
+      $onay.classList.add('acik');
+      const bitir = () => {
+        $onay.classList.remove('acik'); $onay.innerHTML = ''; $onay.onclick = null;
+        if (odak && document.contains(odak)) odak.focus({ preventScroll: true });
+        coz();
+      };
+      $onay.onclick = ev => {
+        const kop = ev.target.closest('[data-kopyala]');
+        if (kop) {
+          const metin = kop.dataset.kopyala === 'sifre' ? sifre : mesaj;
+          navigator.clipboard && navigator.clipboard.writeText(metin).then(() => bildir('Kopyalandı.'), () => {});
+        }
+        if (ev.target.closest('[data-onay="tamam"]')) bitir();
+      };
+      ($onay.querySelector('.whatsapp-dugme') || $onay.querySelector('[data-onay="tamam"]')).focus();
+    });
   }
 
   // Tek alanlı küçük pencere (onay penceresi katmanında)
@@ -1290,7 +1442,7 @@
         <form class="diyalog" role="dialog" aria-modal="true" aria-label="${esc(baslik)}">
           <h3>${esc(baslik)}</h3>
           <p class="soluk kucuk-yazi">${esc(aciklama)}</p>
-          <div class="alan"><div class="kopyala-alan"><input name="deger" value="${esc(varsayilan)}" minlength="6" maxlength="64" autocomplete="off" spellcheck="false">
+          <div class="alan"><div class="kopyala-alan"><input name="deger" value="${esc(varsayilan)}" minlength="8" maxlength="64" autocomplete="off" spellcheck="false">
             <button type="button" class="ikon-dugme kucuk" data-kopyala aria-label="Kopyala">${ikon('kopyala')}</button></div>
             <em class="alan-hata" data-hata="deger"></em></div>
           <div class="diyalog-dugmeleri">
@@ -1308,7 +1460,7 @@
       };
       f.addEventListener('submit', ev => {
         ev.preventDefault();
-        if (f.deger.value.trim().length < 6) { f.querySelector('[data-hata]').textContent = 'En az 6 karakter.'; return; }
+        if (f.deger.value.trim().length < 8) { f.querySelector('[data-hata]').textContent = 'En az 8 karakter.'; return; }
         bitir(f.deger.value.trim());
       });
       $onay.onclick = ev => {
@@ -1548,6 +1700,17 @@
           <p class="soluk kucuk-yazi">Öğretmen olarak kayıt olup yanlışlıkla mezun başvurusu yapanlar için “Öğretmen”i seçin.</p>
         </section>
         <section class="inceleme-bolum">
+          <h3>Mezun listesi kontrolü</h3>
+          <div class="liste-kontrol" data-liste-kontrol><span class="soluk kucuk-yazi">Okulun mezun listesiyle karşılaştırılıyor…</span></div>
+        </section>
+        <section class="inceleme-bolum giris-yontemi">
+          <h3>Onaylanınca giriş</h3>
+          <label class="onay-kutusu"><input type="radio" name="onayGiris" value="sifre" ${whatsappNumarasi(k.telefon) ? 'checked' : ''}>
+            <span><strong>Geçici şifre oluştur, WhatsApp ile gönder</strong><small>E-posta kotası harcamaz. Kişi ilk girişte kendi şifresini belirler; şifre 7 gün geçerlidir.</small></span></label>
+          <label class="onay-kutusu"><input type="radio" name="onayGiris" value="eposta" ${whatsappNumarasi(k.telefon) ? '' : 'checked'}>
+            <span><strong>Yalnızca onay e-postası gönder</strong><small>Kişi e-postasına gelen kodla giriş yapar.</small></span></label>
+        </section>
+        <section class="inceleme-bolum">
           <h3>Başvuru ve onay</h3>
           <dl class="tanim-listesi">
             ${satir('Başvuru tarihi', tarihYaz(k.kayitTarihi))}
@@ -1561,11 +1724,28 @@
           <button class="dugme ikincil" data-ac="basvuru-duzenle" data-id="${k.id}">${ikon('kalem')}<span>Düzenle</span></button>
           <button class="dugme" data-ac="onayla" data-id="${k.id}">${ikon('tamam')}<span>Onayla</span></button>`
     });
+    listeKontrolu(k.id);
     const bransAlani = $katman.querySelector('.rol-brans');
     $katman.querySelectorAll('[name="onayTur"]').forEach(r => r.addEventListener('change', () => {
       bransAlani.hidden = r.value !== 'ogretmen' || !r.checked;
       if (!bransAlani.hidden) bransAlani.querySelector('input').focus();
     }));
+  }
+
+  async function listeKontrolu(id) {
+    const kutu = $katman.querySelector('[data-liste-kontrol]');
+    if (!kutu) return;
+    let r;
+    try { r = await Api.basvuruKontrol(id); } catch (e) { r = { kaynakYok: true }; }
+    if (!document.contains(kutu)) return;
+    const cip = (renk, simge, yazi) => `<span class="durum-cip ${renk}">${ikon(simge, 'kucuk')}${yazi}</span>`;
+    let html;
+    if (r.kaynakYok) html = `<span class="soluk kucuk-yazi">Mezun listesine şu anda ulaşılamadı.</span>`;
+    else if (r.listede && r.telefonEslesiyor) html = cip('yesil', 'tamam', 'Telefon mezun listesiyle eşleşiyor') + `<small class="soluk">Listede: ${esc(r.listeAd)}</small>`;
+    else if (r.listede) html = cip('turuncu', 'bilgi', 'E-posta listede, telefon farklı') + `<small class="soluk">Listede: ${esc(r.listeAd)}. Şifreyi göndermeden önce kişiyi doğrulayın.</small>`;
+    else if (r.telefonListedeBaskasi) html = cip('kirmizi', 'bilgi', 'Bu telefon listede başka birine ait') + `<small class="soluk">Listede: ${esc(r.telefonListedeBaskasi)}. Dikkatli olun.</small>`;
+    else html = cip('gri', 'bilgi', 'Mezun listesinde yok') + `<small class="soluk">Form listesinde bulunmayan biri olabilir (ör. formu doldurmamış mezun). Tanıyorsanız onaylayabilirsiniz.</small>`;
+    kutu.innerHTML = html;
   }
 
   // Onay çekmecesindeki rol seçimini okur; öğretmen için branş zorunludur.
@@ -1905,7 +2085,12 @@
     nabizBaslat();
     pushSessizYenile();
     siraIsle([
-      () => S.sifreDegistir ? (S.sifreDegistir = false, zorunluSifreDegistir(), true) : false,
+      async () => {
+        // Sayfa yenilense de geçici şifreyle girenin kendi şifresini belirlemesi zorunlu kalır (sunucudan kontrol).
+        if (!S.sifreDegistir && !S.yeniGiris) { try { S.sifreDegistir = !!(await Api.hesabim()).degistirmeli; } catch (e) { /* çevrimdışı */ } }
+        S.yeniGiris = false;
+        return S.sifreDegistir ? (S.sifreDegistir = false, zorunluSifreDegistir(), true) : false;
+      },
       () => kurulumRehberi(false),
       () => S.sifreOner ? (S.sifreOner = false, sifreOnerisi(), true) : false,
       () => uye ? profilTamamlaHatirlat() : false,
@@ -2384,10 +2569,13 @@
       case 'onayla': {
         const rol = onayRolu();
         if (rol === null) return;
+        const yontem = $katman.querySelector('[name="onayGiris"]:checked');
+        const sifre = yontem && yontem.value === 'sifre' ? geciciSifreUret() : '';
         try {
           el.disabled = true;
-          await Api.onayla(id, rol.tur, rol.brans);
-          bildir(`Başvuru ${rol.tur === 'ogretmen' ? 'öğretmen olarak ' : ''}onaylandı. Kişiye e-posta gönderildi; artık giriş yapabilir.`, 'basarili');
+          const r = await Api.onayla(id, rol.tur, rol.brans, sifre);
+          if (sifre) await sifrePaylas(r, sifre, `Başvuru ${rol.tur === 'ogretmen' ? 'öğretmen olarak ' : ''}onaylandı`);
+          else bildir(`Başvuru ${rol.tur === 'ogretmen' ? 'öğretmen olarak ' : ''}onaylandı. Kişiye e-posta gönderildi; artık giriş yapabilir.`, 'basarili');
           yonlendir();
         } catch (e) { el.disabled = false; hataGoster(e); }
         return;

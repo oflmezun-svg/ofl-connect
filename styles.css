@@ -712,6 +712,8 @@ button.geri-baglanti { padding: 0; min-height: 0; color: var(--marka-acik); }
 /* ---------- çekmece: uzun içerikte kaydırma ---------- */
 .cekmece { max-height: 100dvh; }
 .cekmece-govde { min-height: 0; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding-bottom: 28px; }
+/* Içerik kısalmasın: satırlar tam boylarında kalır, sığmayan kısım kaydırılır (overflow:hidden kartlar grid'de ezilmesin). */
+.cekmece-govde { grid-auto-rows: max-content; }
 .cekmece-bas, .cekmece-alt { flex: none; }
 @media (max-width: 760px) {
   .cekmece, .cekmece.genis { max-height: 92dvh; }
@@ -892,3 +894,22 @@ tr.cevrimici .avatar::after { content: ""; position: absolute; right: -1px; bott
   background: var(--yuzey); border: 1px solid var(--cizgi-guclu); border-radius: 10px;
 }
 .genis-diyalog textarea:focus { outline: none; border-color: var(--marka-acik); box-shadow: 0 0 0 3px var(--marka-zemin-2); }
+
+/* ---------- giriş ekranı: yardım ---------- */
+.yardim-dugmesi { margin-top: 4px; }
+#f-yardim textarea {
+  width: 100%; min-height: 120px; padding: 10px 12px; resize: vertical; font: inherit; font-size: .97rem; color: inherit;
+  background: var(--yuzey); border: 1px solid var(--cizgi-guclu); border-radius: 10px;
+}
+#f-yardim textarea:focus { outline: none; border-color: var(--marka-acik); box-shadow: 0 0 0 3px var(--marka-zemin-2); }
+
+/* ---------- giriş sekmeleri, onayda giriş yöntemi, şifre paylaşımı ---------- */
+.giris-sekmeleri { display: flex; width: 100%; margin-bottom: 4px; }
+.giris-sekmeleri label { flex: 1; }
+.giris-sekmeleri label span { justify-content: center; width: 100%; }
+.liste-kontrol { display: grid; gap: 6px; justify-items: start; }
+.giris-yontemi { display: grid; gap: 8px; }
+.sifre-kutu { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-radius: 12px; background: var(--yuzey-2); border: 1px dashed var(--cizgi-guclu); }
+.sifre-kutu code { flex: 1; font-size: 1.35rem; font-weight: 700; letter-spacing: .06em; user-select: all; }
+.whatsapp-dugme { background: #1fa855; color: #fff; justify-content: center; }
+.whatsapp-dugme:hover { background: #178a45; color: #fff; }
