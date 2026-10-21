@@ -562,6 +562,7 @@
     // yöneticinin verdiği geçici şifreyle girenler kendi şifresini belirlemek zorundadır.
     S.sifreOner = !o.sifreVar && !yerelDepo('ofl-sifre-onerisi-' + o.id);
     S.sifreDegistir = !!o.degistirmeli;
+    S.yoneticiListesi = null; S.asil = false;
     S.yeniGiris = true;
     S.acilisYapildi = false;
     S.gecmis = [];
@@ -895,7 +896,7 @@
           `${ikon('bilgi', 'kucuk')} Öğretmenler rehberde “Öğretmen” etiketiyle görünür ve mezunlarla aynı haklara sahiptir: rehberi görür, duyuruları alır, yalnızca kendi bilgisini düzenler.`)}</p>
       </fieldset>` : '';
 
-    const yetki = mod === 'yeni' ? `
+    const yetki = mod === 'yeni' && S.asil ? `
       <fieldset class="form-bolum">
         <legend>Yetki</legend>
         <label class="onay-kutusu sadece-ogretmen">
@@ -1338,10 +1339,68 @@
       govde: `${iletisim.length ? `<div class="iletisim-dugmeleri">${iletisim.join('')}</div>` : ''}
         ${bilgiListesi(k)}
         ${notlar.map(n => `<p class="not">${n}</p>`).join('')}
-        ${admin ? `<section class="inceleme-bolum" id="sifre-bolumu"><h3>Giriş şifresi</h3><p class="soluk kucuk-yazi">${yukleniyor()}</p></section>` : ''}`,
+        ${admin ? `<section class="inceleme-bolum" id="sifre-bolumu"><h3>Giriş şifresi</h3><p class="soluk kucuk-yazi">${yukleniyor()}</p></section>
+          <section class="inceleme-bolum" id="yetki-bolumu"></section>` : ''}`,
       alt
     });
-    if (admin) sifreBolumunuDoldur(k);
+    if (admin) { sifreBolumunuDoldur(k); yetkiBolumunuDoldur(k); }
+  }
+
+  // Yönetici listesi (asil olanlar işaretli) oturum boyunca önbellekte tutulur.
+  async function yoneticiBilgisi(yenile) {
+    if (!S.yoneticiListesi || yenile) {
+      S.yoneticiListesi = await Api.yoneticiler();
+      S.asil = S.yoneticiListesi.some(y => y.sen && y.asil);
+    }
+    return S.yoneticiListesi;
+  }
+
+  // Yönetici: kişinin yönetici yetkisi; yalnızca asil yöneticiler verip kaldırabilir.
+  async function yetkiBolumunuDoldur(k) {
+    let liste;
+    try { liste = await yoneticiBilgisi(); } catch (e) { return; }
+    const yer = byId('yetki-bolumu');
+    if (!yer) return;
+    const y = liste.find(x => x.eposta === k.eposta);
+    const kendisi = y && y.sen;
+    // Asil yöneticinin kaydına (ve diğer yöneticilerin kaydını silmeye) yalnızca asil yöneticiler dokunabilir.
+    if (!S.asil && y && !kendisi) {
+      const alt = $katman.querySelector('.cekmece-alt');
+      if (y.asil) {
+        if (alt) alt.innerHTML = `<p class="soluk kucuk-yazi">${ikon('kalkan', 'kucuk')} Asil yönetici: bilgilerini yalnızca kendisi ve asil yöneticiler değiştirebilir.</p>`;
+        const sb = byId('sifre-bolumu'); if (sb) sb.remove();
+      } else if (alt) {
+        const sil = alt.querySelector('[data-ac="sil"]'); if (sil) sil.remove();
+      }
+    }
+    const durum = y ? (y.asil ? `<span class="durum-cip yesil">${ikon('kalkan', 'kucuk')}Asil yönetici</span>` : `<span class="durum-cip turuncu">${ikon('kalkan', 'kucuk')}Yönetici</span>`)
+      : `<span class="durum-cip gri">Yönetici değil</span>`;
+    let eylem = '';
+    if (S.asil && !kendisi) {
+      if (!y && k.durum === 'onayli') eylem = `<button class="dugme ikincil kucuk" data-ac="yonetici-yap" data-id="${k.id}">${ikon('kalkan', 'kucuk')}<span>Yönetici yap</span></button>`;
+      else if (y && !y.asil) eylem = `<button class="dugme tehlike-cerceve kucuk" data-ac="yonetici-kaldir" data-id="${k.id}">${ikon('kapat', 'kucuk')}<span>Yönetici yetkisini kaldır</span></button>`;
+    }
+    yer.innerHTML = `<h3>Yönetici yetkisi</h3>
+      <div class="yetki-durumu">${durum}</div>
+      <p class="soluk kucuk-yazi">${y && y.asil ? 'Asil yöneticiler diğer kişilere yönetici yetkisi verip kaldırabilir; asil yöneticinin yetkisi uygulamadan değiştirilemez.'
+        : S.asil ? 'Yönetici yapılan kişi bir sonraki girişinde yönetici paneline erişir; rehberdeki kaydı aynen kalır.'
+        : 'Yönetici yetkisini yalnızca asil yöneticiler verip kaldırabilir.'}</p>
+      ${eylem ? `<div class="sifre-eylemleri">${eylem}</div>` : ''}`;
+  }
+
+  async function yetkiIslemi(id, ver) {
+    const k = await kayitGetir(id).catch(() => null);
+    if (!k) return;
+    const ad = adSoyad(k);
+    const soru = ver ? `${ad} yönetici yapılacak: tüm kayıtları görebilecek, başvuruları onaylayıp duyuru yayınlayabilecek. Onaylıyor musunuz?`
+      : `${ad} kişisinin yönetici yetkisi kaldırılacak; oturumu hemen kapanır ve bundan sonra ${ogretmen(k) ? 'öğretmen' : 'mezun'} olarak girer.`;
+    if (!await onayIste(soru, ver ? 'Yönetici yap' : 'Yetkiyi kaldır', !ver)) return;
+    try {
+      if (ver) await Api.yoneticiYap(id); else await Api.yoneticiKaldir(k.eposta);
+      await yoneticiBilgisi(true);
+      bildir(ver ? `${ad} artık yönetici.` : `${ad} kişisinin yönetici yetkisi kaldırıldı.`, 'basarili');
+      yetkiBolumunuDoldur(k);
+    } catch (e) { hataGoster(e); }
   }
 
   // Yönetici: kişinin şifresi var mı; sıfırlama ve geçici şifre verme.
@@ -2092,6 +2151,7 @@
 
   async function acilisIslemleri() {
     const uye = S.oturum.rol !== 'admin';
+    if (!uye) yoneticiBilgisi(true).catch(() => {});
     nabizBaslat();
     pushSessizYenile();
     siraIsle([
@@ -2455,7 +2515,7 @@
   async function panelEkrani() {
     const ic = byId('icerik');
     ic.innerHTML = sayfaBasi('Yönetim Paneli', 'Genel görünüm ve yönetim araçları') + yukleniyor();
-    const [ist, yoneticiler] = await Promise.all([Api.istatistik(), Api.yoneticiler().catch(() => [])]);
+    const [ist, yoneticiler] = await Promise.all([Api.istatistik(), yoneticiBilgisi(true).catch(() => [])]);
     const enCok = Math.max(...ist.yillar.map(y => y.adet), 1);
     const sehirMax = ist.sehirler[0] ? ist.sehirler[0].adet : 1;
     const yuzde = n => ist.toplam ? Math.round(n / ist.toplam * 100) : 0;
@@ -2502,8 +2562,12 @@
         <div class="kart">
           <h3>Yöneticiler <small class="soluk">(${yoneticiler.length})</small></h3>
           <ul class="yonetici-listesi">${yoneticiler.map(y => `<li>${avatar({ id: y.eposta, ad: (y.ad || y.eposta)[0], soyad: (y.ad || '').split(' ').slice(-1)[0][0] || '' }, 'kucuk')}
-            <span><strong>${esc(y.ad || 'Yönetici')}</strong><small>${esc(y.eposta)}</small></span></li>`).join('')}</ul>
-          <p class="soluk kucuk-yazi">Öğretmen eklerken <strong>Yönetici yetkisi ver</strong> seçeneğiyle yeni yönetici tanımlayabilirsiniz. Okul dışından birini yönetici yapmak veya yetkiyi kaldırmak için Google E-Tablo'daki <strong>Yoneticiler</strong> sayfasını kullanın (menü: OFL Connect → Yönetici ekle).</p>
+            <span><strong>${esc(y.ad || 'Yönetici')}${y.sen ? ' <span class="etiket">Siz</span>' : ''}</strong><small>${esc(y.eposta)}</small></span>
+            ${y.asil ? `<span class="durum-cip yesil">${ikon('kalkan', 'kucuk')}Asil</span>`
+              : S.asil ? `<button class="ikon-dugme kucuk" data-ac="panel-yetki-kaldir" data-eposta="${esc(y.eposta)}" aria-label="${esc(y.ad || y.eposta)} yönetici yetkisini kaldır" title="Yetkiyi kaldır">${ikon('kapat', 'kucuk')}</button>` : ''}</li>`).join('')}</ul>
+          <p class="soluk kucuk-yazi">${S.asil
+            ? 'Bir kişiyi yönetici yapmak için Rehber’de kişiye dokunun ve <strong>Yönetici yap</strong>’a basın. Yetkiyi kaldırmak için listedeki ✕ düğmesini kullanın. Asil yöneticilerin yetkisi uygulamadan değiştirilemez.'
+            : 'Yönetici yetkisini yalnızca <strong>asil</strong> yöneticiler verip kaldırabilir.'}</p>
         </div>
         <div class="kart">
           <h3>Araçlar</h3>
@@ -2578,6 +2642,14 @@
         return listeyiCiz();
       case 'sifre-sifirla': return sifreIslemi(id, 'sifirla');
       case 'sifre-ver': return sifreIslemi(id, 'belirle');
+      case 'yonetici-yap': return yetkiIslemi(id, true);
+      case 'yonetici-kaldir': return yetkiIslemi(id, false);
+      case 'panel-yetki-kaldir': {
+        const y = (S.yoneticiListesi || []).find(x => x.eposta === el.dataset.eposta);
+        if (!y || !await onayIste(`${y.ad || y.eposta} kişisinin yönetici yetkisi kaldırılacak; oturumu hemen kapanır.`, 'Yetkiyi kaldır', true)) return;
+        try { await Api.yoneticiKaldir(y.eposta); await yoneticiBilgisi(true); bildir('Yönetici yetkisi kaldırıldı.', 'basarili'); yonlendir(); } catch (e) { hataGoster(e); }
+        return;
+      }
       case 'kurulum-rehberi': return kurulumRehberi(true);
       case 'bildirim-ac': return bildirimleriAc(el);
       case 'sekme':

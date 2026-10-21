@@ -280,6 +280,11 @@
   const yeniId = on => on + Math.random().toString(36).slice(2, 10);
   const kucuk = e => String(e || '').trim().toLocaleLowerCase('tr-TR');
   const yoneticiMi = e => D.yoneticiler.some(y => y.eposta === kucuk(e));
+  // Demoda sistem yöneticisi asil yöneticidir.
+  const asilMi = e => kucuk(e || '') === YONETICI_EPOSTA;
+  const telAnahtar = t => { const r = String(t || '').replace(/\D/g, ''); return r.length >= 10 ? r.slice(-10) : ''; };
+  const telefonKullanimda = (t, haric) => !!telAnahtar(t) && D.kayitlar.some(k => k.id !== haric && k.durum !== 'reddedildi' && telAnahtar(k.telefon) === telAnahtar(t));
+  const TELEFON_KULLANIMDA = 'Bu telefon numarasıyla zaten bir kayıt var; aynı kişi için ikinci kayıt açılamaz. Daha önce kayıt olduysanız giriş yapın; sorun yaşıyorsanız giriş ekranındaki “Yardım ve sorular”dan bize yazın.';
   const sifreDenemeleri = {};
 
   function oturumOku() { return depoOku(OTURUM_ANAHTARI) || depoOku(OTURUM_ANAHTARI, true); }
@@ -603,6 +608,7 @@
       const yeniTur = o.rol === 'admin' && (veri.tur === 'ogretmen' || veri.tur === 'mezun') ? veri.tur : k.tur;
       const { temiz, hatalar } = dogrula(Object.assign({}, veri, { tur: yeniTur }), o.rol !== 'admin');
       if (!hatalar.eposta && epostaKullanimda(temiz.eposta, id)) hatalar.eposta = 'Bu e-posta başka bir kayıtta kullanılıyor.';
+      if (!hatalar.telefon && telefonKullanimda(temiz.telefon, id)) hatalar.telefon = 'Bu telefon numarası başka bir kayıtta kullanılıyor.';
       if (Object.keys(hatalar).length) throw dogrulamaHatasi(hatalar);
       if (temiz.eposta !== k.eposta && D.sifreler[k.eposta]) {
         D.sifreler[temiz.eposta] = D.sifreler[k.eposta];
@@ -624,6 +630,7 @@
       const { temiz, hatalar } = dogrula(Object.assign({}, veri, { tur: 'mezun' }), true);
       const eski = D.kayitlar.find(k => k.eposta === temiz.eposta);
       if (!hatalar.eposta && ((eski && eski.durum !== 'reddedildi') || yoneticiMi(temiz.eposta))) hatalar.eposta = 'Bu e-posta ile zaten bir kayıt var.';
+      if (!hatalar.telefon && telefonKullanimda(temiz.telefon)) hatalar.telefon = TELEFON_KULLANIMDA;
       if (!veri.kvkkOnay) hatalar.kvkk = 'Devam etmek için açık rıza onayı gereklidir.';
       if (Object.keys(hatalar).length) throw dogrulamaHatasi(hatalar);
       const simdi = new Date().toISOString();
@@ -643,13 +650,14 @@
       const tur = veri.tur === 'ogretmen' ? 'ogretmen' : 'mezun';
       const { temiz, hatalar } = dogrula(Object.assign({}, veri, { tur }));
       if (!hatalar.eposta && D.kayitlar.some(k => k.eposta === temiz.eposta)) hatalar.eposta = 'Bu e-posta ile zaten bir kayıt var.';
+      if (!hatalar.telefon && telefonKullanimda(temiz.telefon)) hatalar.telefon = TELEFON_KULLANIMDA;
       if (Object.keys(hatalar).length) throw dogrulamaHatasi(hatalar);
       const simdi = new Date().toISOString();
       const k = Object.assign({ id: yeniId(tur === 'ogretmen' ? 't' : 'm') }, temiz, {
         durum: 'onayli', kvkkOnay: null, kayitTarihi: simdi, guncelleme: simdi, silmeTalebi: null
       });
       D.kayitlar.push(k);
-      const yonetici = tur === 'ogretmen' && !!veri.yonetici;
+      const yonetici = tur === 'ogretmen' && !!veri.yonetici && asilMi((oturumOku() || {}).eposta);
       if (yonetici && !yoneticiMi(k.eposta)) D.yoneticiler.push({ eposta: k.eposta, ad: k.ad + ' ' + k.soyad });
       kaydet();
       return { id: k.id, durum: 'onayli', yonetici, bilgilendirildi: veri.bilgilendir !== false };
@@ -817,9 +825,31 @@
       kaydet();
     },
 
+    async yoneticiYap(id) {
+      const o = yetkiGerekli('admin');
+      if (!asilMi(o.eposta)) throw hata('Yönetici yetkisini yalnızca asil yöneticiler verip kaldırabilir.');
+      await bekle(250);
+      const k = bul(id);
+      if (!k || k.durum !== 'onayli') throw hata('Onaylı bir kayıt seçin.');
+      if (!yoneticiMi(k.eposta)) D.yoneticiler.push({ eposta: k.eposta, ad: k.ad + ' ' + k.soyad });
+      kaydet();
+      return { yonetici: true };
+    },
+
+    async yoneticiKaldir(eposta) {
+      const o = yetkiGerekli('admin');
+      if (!asilMi(o.eposta)) throw hata('Yönetici yetkisini yalnızca asil yöneticiler verip kaldırabilir.');
+      if (asilMi(eposta)) throw hata('Asil yöneticinin yetkisi uygulamadan kaldırılamaz.');
+      await bekle(250);
+      D.yoneticiler = D.yoneticiler.filter(y => y.eposta !== kucuk(eposta));
+      kaydet();
+      return { yonetici: false };
+    },
+
     async yoneticiler() {
       yetkiGerekli('admin');
-      return D.yoneticiler.map(y => ({ eposta: y.eposta, ad: y.ad }));
+      const o = oturumOku() || {};
+      return D.yoneticiler.map(y => ({ eposta: y.eposta, ad: y.ad, asil: asilMi(y.eposta), sen: y.eposta === kucuk(o.eposta || '') }));
     },
 
     async istatistik() {

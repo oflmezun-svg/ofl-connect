@@ -154,6 +154,8 @@
     silmeTalepleri: () => cagir('silmeTalepleri'),
     onayla: (id, tur, brans, sifre) => cagir('onayla', { id, tur, brans, sifre }),
     basvuruKontrol: id => cagir('basvuruKontrol', { id }),
+    yoneticiYap: id => cagir('yoneticiYap', { id }),
+    yoneticiKaldir: eposta => cagir('yoneticiKaldir', { eposta }),
     sil: id => cagir('sil', { id }),
     istatistik: () => cagir('istatistik'),
     csv: () => cagir('csv'),
