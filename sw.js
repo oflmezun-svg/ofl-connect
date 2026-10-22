@@ -1,7 +1,7 @@
 /* OFL Connect — service worker: uygulama kabuğunu önbelleğe alır (uygulama ana ekrandan
    anında açılır) ve duyuru bildirimlerini gösterir. Sürüm numarasını her yayında artırın
    ki kullanıcılar yeni dosyaları alsın. */
-const SURUM = 'ofl-connect-v10';
+const SURUM = 'ofl-connect-v11';
 const KABUK = ['./', 'index.html', 'styles.css', 'config.js', 'ortak.js', 'api.js', 'data.js', 'app.js', 'manifest.json',
   'icons/ofl-logo.png', 'icons/favicon-64.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 

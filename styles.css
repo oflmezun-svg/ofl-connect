@@ -913,3 +913,33 @@ tr.cevrimici .avatar::after { content: ""; position: absolute; right: -1px; bott
 .sifre-kutu code { flex: 1; font-size: 1.35rem; font-weight: 700; letter-spacing: .06em; user-select: all; }
 .whatsapp-dugme { background: #1fa855; color: #fff; justify-content: center; }
 .whatsapp-dugme:hover { background: #178a45; color: #fff; }
+
+/* ---------- teyit penceresi ---------- */
+.onay-diyalog { width: min(440px, calc(100% - 32px)); display: grid; gap: 12px; }
+.onay-diyalog p { margin: 0; }
+.onay-bas { display: flex; align-items: center; gap: 12px; }
+.onay-bas h3 { margin: 0; font-size: 1.08rem; }
+.onay-ikon { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--marka-zemin); color: var(--marka); }
+.onay-ikon.tehlike { background: var(--tehlike-zemin); color: var(--tehlike); }
+.onay-ikon .ikon { width: 20px; height: 20px; }
+.onay-maddeler { margin: 0; padding: 10px 12px 10px 30px; border-radius: 10px; background: var(--yuzey-2); display: grid; gap: 4px; font-size: .92rem; color: var(--metin-2); }
+.onay-diyalog .diyalog-dugmeleri { margin-top: 4px; }
+
+/* ---------- iletişim talepleri ---------- */
+.iletisim-talebi { display: grid; gap: 6px; justify-items: start; margin-top: 8px; }
+.iletisim-talebi small { font-size: .82rem; line-height: 1.4; }
+.izin-notu { display: flex; gap: 6px; align-items: center; margin-top: 4px; font-size: .8rem; color: var(--yesil); }
+.talep-bolum { display: grid; gap: 12px; margin-bottom: 16px; }
+.talep-bolum h3 { margin: 0; display: flex; align-items: center; gap: 8px; }
+.talep-listesi { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.talep-listesi > li { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--cizgi); border-radius: 12px; }
+.talep-kisi { display: flex; gap: 10px; align-items: center; background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.talep-kisi span:last-child { display: grid; }
+.talep-kisi small { color: var(--soluk); }
+.talep-eylem { display: grid; gap: 6px; justify-items: end; flex: 1 1 260px; text-align: right; }
+.talep-dugmeler { display: flex; gap: 8px; }
+.talep-eylem small { font-size: .8rem; line-height: 1.4; max-width: 420px; }
+@media (max-width: 680px) { .talep-eylem { justify-items: stretch; text-align: left; } .talep-dugmeler .dugme { flex: 1; } }
+.talep-ozet { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+.talep-ozet li { display: flex; align-items: center; gap: 10px; }
+.talep-ozet li .durum-cip { margin-left: auto; }

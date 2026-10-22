@@ -179,12 +179,19 @@
     if (sonraki) setTimeout(sonraki, 250);
   }
 
-  function onayIste(mesaj, dugme, tehlikeli) {
+  // Kritik ve kazara yapılabilecek işlemler için teyit penceresi.
+  // ek: { baslik, ikon, maddeler: ['Bu işlemden sonra ne olacağı', ...] }
+  function onayIste(mesaj, dugme, tehlikeli, ek) {
+    ek = ek || {};
     return new Promise(coz => {
       const odak = document.activeElement;
+      const baslik = ek.baslik || 'Emin misiniz?';
       $onay.innerHTML = `<div class="perde"></div>
-        <div class="diyalog" role="alertdialog" aria-modal="true" aria-label="Onay">
-          <p>${esc(mesaj)}</p>
+        <div class="diyalog onay-diyalog" role="alertdialog" aria-modal="true" aria-labelledby="onay-baslik" aria-describedby="onay-metin">
+          <div class="onay-bas"><span class="onay-ikon ${tehlikeli ? 'tehlike' : ''}">${ikon(ek.ikon || (tehlikeli ? 'bilgi' : 'tamam'))}</span>
+            <h3 id="onay-baslik">${esc(baslik)}</h3></div>
+          <p id="onay-metin">${esc(mesaj)}</p>
+          ${ek.maddeler && ek.maddeler.length ? `<ul class="onay-maddeler">${ek.maddeler.map(m => `<li>${esc(m)}</li>`).join('')}</ul>` : ''}
           <div class="diyalog-dugmeleri">
             <button class="dugme ikincil" data-onay="hayir">Vazgeç</button>
             <button class="dugme ${tehlikeli ? 'tehlike' : ''}" data-onay="evet">${esc(dugme)}</button>
@@ -235,7 +242,7 @@
    * Yönlendirme
    * ===================================================================== */
 
-  const UYE_MENU = [['rehber', 'Rehber', 'kisiler'], ['duyurular', 'Duyurular', 'duyuru'], ['profil', 'Profilim', 'kisi']];
+  const UYE_MENU = [['rehber', 'Rehber', 'kisiler'], ['duyurular', 'Duyurular', 'duyuru'], ['talepler', 'Talepler', 'mesaj'], ['profil', 'Profilim', 'kisi']];
   const MENU = {
     mezun: UYE_MENU,
     ogretmen: UYE_MENU,
@@ -268,7 +275,7 @@
     const menu = MENU[S.oturum.rol] || MENU.mezun;
     if (!menu.some(m => m[0] === yol)) { location.replace('#/rehber'); return; }
     kabuk(yol);
-    const ekran = { rehber: rehberEkrani, duyurular: duyurularEkrani, profil: profilEkrani, basvurular: basvurularEkrani, panel: panelEkrani }[yol];
+    const ekran = { rehber: rehberEkrani, duyurular: duyurularEkrani, talepler: taleplerEkrani, profil: profilEkrani, basvurular: basvurularEkrani, panel: panelEkrani }[yol];
     try {
       await ekran();
       if (!S.acilisYapildi) { S.acilisYapildi = true; acilisIslemleri(); }
@@ -289,7 +296,8 @@
   function kabuk(aktif) {
     const admin = S.oturum.rol === 'admin';
     const rozet = y => y === 'basvurular' ? '<span class="menu-rozet" data-rozet hidden></span>'
-      : y === 'duyurular' && !admin ? '<span class="menu-rozet" data-duyuru-rozet hidden></span>' : '';
+      : y === 'duyurular' && !admin ? '<span class="menu-rozet" data-duyuru-rozet hidden></span>'
+      : y === 'talepler' ? '<span class="menu-rozet" data-talep-rozet hidden></span>' : '';
     const menuHtml = (MENU[S.oturum.rol] || MENU.mezun).map(([y, ad, ik]) =>
       `<a href="#/${y}" class="menu-ogesi ${y === aktif ? 'aktif' : ''}" ${y === aktif ? 'aria-current="page"' : ''}>
         ${ikon(ik)}<span>${ad}</span>${rozet(y)}
@@ -767,6 +775,10 @@
       else if (f.sifre.value !== f.sifre2.value) hatalar.sifre2 = 'Şifreler aynı değil.';
       for (const [a, m] of Object.entries(hatalar)) { f.querySelector(`[data-hata="${a}"]`).textContent = m; f[a].focus(); }
       if (Object.keys(hatalar).length) return;
+      if (!await onayIste('Şifreniz değiştirilecek.', 'Şifreyi kaydet', false, {
+        baslik: 'Yeni şifre kaydedilsin mi?', ikon: 'anahtar',
+        maddeler: ['Bundan sonra bu yeni şifreyle giriş yapacaksınız; eski şifre çalışmaz.', 'Şifrenizi unutursanız giriş ekranındaki “Şifremi unuttum” ile yenileyebilirsiniz.']
+      })) return;
       const b = $katman.querySelector('[data-sifre-kaydet]'); b.disabled = true;
       try { await Api.sifreBelirle(f.sifre.value); basarili(); }
       catch (e) {
@@ -1278,6 +1290,8 @@
       <div class="bilgi-govde">
         <span class="bilgi-etiket">${etiket}</span>
         ${gizli ? `<span class="bilgi-gizli">${ikon('kilit', 'kucuk')} Paylaşılmıyor</span>` : `<span class="bilgi-deger">${icerik || '<span class="soluk">Belirtilmemiş</span>'}</span>`}
+        ${alan === 'telefon' && gizli && !k.tamYetki ? `<div class="iletisim-talebi" data-iletisim-yer><span class="soluk kucuk-yazi">${yukleniyor()}</span></div>` : ''}
+        ${alan === 'telefon' && k.telefonIzinli ? `<small class="izin-notu">${ikon('kilit', 'kucuk')} Numarayı yalnızca siz görüyorsunuz: iletişim talebiniz kabul edildi.</small>` : ''}
       </div>
       ${gorunurlukEtiketi}
     </div>`;
@@ -1344,6 +1358,150 @@
       alt
     });
     if (admin) { sifreBolumunuDoldur(k); yetkiBolumunuDoldur(k); }
+    else if (!k.kendisi && (k.gizli || []).includes('telefon')) iletisimBolumunuDoldur(k);
+  }
+
+  /* ---------- İletişim talepleri ---------- */
+
+  async function iletisimBolumunuDoldur(k) {
+    let r;
+    try { r = await Api.iletisimDurumu(k.id); } catch (e) { r = null; }
+    const yer = $katman.querySelector('[data-iletisim-yer]');
+    if (!yer) return;
+    if (!r) { yer.innerHTML = ''; return; }
+    if (r.telefon) {
+      // Talep kabul edilmiş (ya da kişi numarasını açmış): kayıt güncellenir, pencere numarayla yeniden açılır.
+      Object.assign(k, { telefon: r.telefon, gizli: k.gizli.filter(a => a !== 'telefon'), telefonIzinli: r.durum === 'kabul' });
+      const l = S.liste.find(x => x.id === k.id); if (l && l !== k) Object.assign(l, k);
+      return detayAc(k.id);
+    }
+    const ad = k.ad;
+    const tekrarGecti = r.durum === 'red' && r.tekrar && new Date(r.tekrar) <= new Date();
+    if (r.telefonVar === false) yer.innerHTML = `<span class="soluk kucuk-yazi">Kayıtlı bir telefon numarası yok.</span>`;
+    else if (r.durum === 'bekliyor') yer.innerHTML = `<span class="durum-cip turuncu">${ikon('saat', 'kucuk')}Talep gönderildi · yanıt bekleniyor</span>
+      <small class="soluk">${esc(ad)} kabul ederse numarası yalnızca size görünür ve size bildirim gelir; kabul etmezse yine bildirilirsiniz.</small>`;
+    else if (r.durum === 'red' && !tekrarGecti) yer.innerHTML = `<span class="durum-cip gri">${ikon('kapat', 'kucuk')}Talebiniz kabul edilmedi</span>
+      <small class="soluk">${r.tekrar ? `${tarihYaz(r.tekrar)} tarihinden sonra yeniden talep gönderebilirsiniz.` : ''}</small>`;
+    else yer.innerHTML = `<button class="dugme ikincil kucuk" data-ac="iletisim-talebi" data-id="${k.id}">${ikon('mesaj', 'kucuk')}<span>İletişim talebi gönder</span></button>
+      <small class="soluk">${esc(ad)} kişisine bildirim gider. Kabul ederse telefon numarası yalnızca size görünür; kabul etmezse size bildirilir.${r.durum === 'geri' ? ' (Daha önce verdiği izni geri aldı.)' : ''}</small>`;
+  }
+
+  async function iletisimTalebiGonder(id) {
+    const k = await kayitGetir(id).catch(() => null);
+    if (!k) return;
+    const ad = adSoyad(k);
+    if (!await onayIste(`${ad} kişisine telefon numarasını görmek istediğinize dair bir bildirim gönderilecek.`, 'Talep gönder', false, {
+      baslik: 'İletişim talebi gönderilsin mi?', ikon: 'mesaj',
+      maddeler: [`${k.ad} kabul ederse telefon numarası yalnızca size görünür.`, 'Kabul etmezse size bildirim gelir; 7 gün sonra yeniden deneyebilirsiniz.', 'Talebinizin durumunu “Talepler” sayfasından izleyebilirsiniz.']
+    })) return;
+    try {
+      const r = await Api.iletisimTalebi(id);
+      bildir(r.durum === 'acik' ? 'Bu kişinin telefon numarası artık herkese açık.' : `Talebiniz ${k.ad} kişisine iletildi. Yanıt verince size bildirim gelecek.`, 'basarili');
+      detayAc(id);
+    } catch (e) { hataGoster(e); }
+  }
+
+  function talepRozeti(t) {
+    const n = t.gelen.filter(x => x.durum === 'bekliyor').length + t.giden.filter(x => x.yeni).length;
+    document.querySelectorAll('[data-talep-rozet]').forEach(el => { el.textContent = n; el.hidden = !n; });
+    return n;
+  }
+
+  const TALEP_DURUMU = {
+    bekliyor: ['turuncu', 'saat', 'Yanıt bekleniyor'], kabul: ['yesil', 'tamam', 'Kabul edildi'],
+    red: ['gri', 'kapat', 'Kabul edilmedi'], geri: ['gri', 'kilit', 'İzin geri alındı']
+  };
+
+  async function taleplerEkrani() {
+    const ic = byId('icerik');
+    const alt = 'Telefon numarasını paylaşmayan kişilerle iletişim talepleriniz';
+    ic.innerHTML = sayfaBasi('İletişim talepleri', alt) + yukleniyor();
+    const t = await Api.iletisimTalepleri();
+    S.talepler = t;
+    talepRozeti(t);
+    const kisi = x => `<button class="talep-kisi" data-ac="detay" data-id="${esc(x.kisi.id)}">${avatar(x.kisi)}<span><strong>${esc(x.kisi.ad + ' ' + x.kisi.soyad)}</strong>
+      <small>${esc(x.kisi.tur === 'ogretmen' ? (x.kisi.brans ? x.kisi.brans + ' öğretmeni' : 'Öğretmen') : x.kisi.yil + ' mezunu')}</small></span></button>`;
+    const bekleyen = t.gelen.filter(x => x.durum === 'bekliyor');
+    const izinli = t.gelen.filter(x => x.durum === 'kabul');
+    ic.innerHTML = sayfaBasi('İletişim talepleri', alt) + `
+      <section class="kart talep-bolum">
+        <h3>Size gelen talepler ${bekleyen.length ? `<span class="sayac">${bekleyen.length}</span>` : ''}</h3>
+        ${bekleyen.length ? `<ul class="talep-listesi">${bekleyen.map(x => `<li>
+          ${kisi(x)}
+          <div class="talep-eylem">
+            <div class="talep-dugmeler">
+              <button class="dugme ikincil kucuk" data-ac="talep-red" data-id="${esc(x.id)}">${ikon('kapat', 'kucuk')}<span>Reddet</span></button>
+              <button class="dugme kucuk" data-ac="talep-kabul" data-id="${esc(x.id)}">${ikon('tamam', 'kucuk')}<span>Kabul et</span></button>
+            </div>
+            <small class="soluk">Kabul ederseniz telefon numaranız yalnızca bu kişiye görünür; diğer herkes için gizli kalır. Reddederseniz kişiye talebinin kabul edilmediği bildirilir.</small>
+          </div></li>`).join('')}</ul>`
+          : `<p class="soluk">Bekleyen talep yok. Biri telefonunuzu görmek istediğinde burada görünür ve telefonunuza bildirim gelir.</p>`}
+      </section>
+      ${izinli.length ? `<section class="kart talep-bolum">
+        <h3>Telefonunuzu görebilenler</h3>
+        <ul class="talep-listesi">${izinli.map(x => `<li>${kisi(x)}
+          <div class="talep-eylem"><div class="talep-dugmeler"><button class="dugme tehlike-cerceve kucuk" data-ac="talep-geri" data-id="${esc(x.id)}">${ikon('kilit', 'kucuk')}<span>İzni geri al</span></button></div>
+          <small class="soluk">İzni geri alırsanız numaranız bu kişiye yeniden gizlenir.</small></div></li>`).join('')}</ul>
+      </section>` : ''}
+      <section class="kart talep-bolum">
+        <h3>Gönderdiğiniz talepler</h3>
+        ${t.giden.length ? `<ul class="talep-listesi">${t.giden.map(x => {
+          const [renk, ik, yazi] = TALEP_DURUMU[x.durum] || TALEP_DURUMU.bekliyor;
+          return `<li>${kisi(x)}<div class="talep-eylem">
+            <span class="durum-cip ${renk}">${ikon(ik, 'kucuk')}${yazi}${x.yeni ? ' · yeni' : ''}</span>
+            <small class="soluk">${x.durum === 'kabul' ? 'Telefon numarası artık size görünüyor; kişiye dokunarak arayabilirsiniz.'
+              : x.durum === 'red' ? (x.tekrar ? `${tarihYaz(x.tekrar)} tarihinden sonra yeniden talep gönderebilirsiniz.` : '')
+              : x.durum === 'geri' ? 'Kişi numarasını görme iznini geri aldı.' : `${tarihYaz(x.olusturma)} tarihinde gönderildi.`}</small></div></li>`;
+        }).join('')}</ul>`
+          : `<p class="soluk">Henüz talep göndermediniz. Rehberde telefon numarası gizli birini açıp “İletişim talebi gönder”e basabilirsiniz.</p>`}
+      </section>`;
+    if (t.giden.some(x => x.yeni)) {
+      Api.iletisimGoruldu().then(() => { t.giden.forEach(x => { x.yeni = false; }); talepRozeti(t); }).catch(() => {});
+    }
+  }
+
+  async function talepYanitla(id, eylem) {
+    const x = (S.talepler ? S.talepler.gelen : []).find(t => t.id === id);
+    if (!x) return;
+    const ad = x.kisi.ad + ' ' + x.kisi.soyad;
+    const ayar = {
+      kabul: [`${ad} telefon numaranızı görebilecek.`, 'Kabul et', false, { baslik: 'Talebi kabul ediyor musunuz?', ikon: 'tamam',
+        maddeler: ['Numaranız yalnızca bu kişiye görünür; diğer herkes için gizli kalır.', 'Kişiye talebinin kabul edildiği bildirilir.', 'İzni istediğiniz zaman bu sayfadan geri alabilirsiniz.'] }],
+      red: [`${ad} kişisinin iletişim talebi reddedilecek.`, 'Reddet', true, { baslik: 'Talebi reddediyor musunuz?', ikon: 'kapat',
+        maddeler: ['Numaranız bu kişiye gizli kalır.', 'Kişiye talebinin kabul edilmediği bildirilir.', 'Kişi 7 gün sonra yeniden talep gönderebilir.'] }],
+      geri: [`${ad} artık telefon numaranızı göremeyecek.`, 'İzni geri al', true, { baslik: 'İzin geri alınsın mı?', ikon: 'kilit',
+        maddeler: ['Numaranız bu kişiye yeniden gizlenir.', 'Kişiye ayrıca bildirim gönderilmez.'] }]
+    }[eylem];
+    if (!await onayIste(...ayar)) return;
+    try {
+      await Api.iletisimYanit(id, eylem === 'kabul');
+      bildir({ kabul: `Kabul edildi. ${x.kisi.ad} numaranızı görebilir ve kendisine bildirim gitti.`, red: `Talep reddedildi; ${x.kisi.ad} kişisine bildirildi.`, geri: 'İzin geri alındı.' }[eylem], 'basarili');
+      taleplerEkrani();
+    } catch (e) { hataGoster(e); }
+  }
+
+  // Açılışta: bekleyen talepler veya yeni sonuçlar varsa kısa bir uyarı (oturum başına bir kez).
+  async function iletisimKontrol() {
+    let t;
+    try { t = await Api.iletisimTalepleri(); } catch (e) { return false; }
+    S.talepler = t;
+    talepRozeti(t);
+    const bekleyen = t.gelen.filter(x => x.durum === 'bekliyor');
+    const yeni = t.giden.filter(x => x.yeni);
+    const imza = bekleyen.map(x => x.id).concat(yeni.map(x => x.id + x.durum)).join(',');
+    if (!imza || sessionStorage.getItem('ofl-talep-uyarisi') === imza || location.hash === '#/talepler') return false;
+    try { sessionStorage.setItem('ofl-talep-uyarisi', imza); } catch (e) { /* gizli mod */ }
+    const satir = x => `<li>${avatar(x.kisi, 'kucuk')}<span>${esc(x.kisi.ad + ' ' + x.kisi.soyad)}</span></li>`;
+    cekmeceAc({
+      etiket: 'İletişim talepleri', orta: true,
+      bas: `<div><span class="ust-etiket">${ikon('mesaj', 'kucuk')} İletişim talepleri</span><h2>${bekleyen.length ? 'Sizinle iletişime geçmek isteyenler var' : 'Talepleriniz yanıtlandı'}</h2></div>`,
+      govde: `${bekleyen.length ? `<p>Aşağıdaki kişiler telefon numaranızı görmek istiyor. Kabul ederseniz numaranız yalnızca onlara görünür.</p>
+          <ul class="talep-ozet">${bekleyen.map(satir).join('')}</ul>` : ''}
+        ${yeni.length ? `<p>Gönderdiğiniz talepler yanıtlandı:</p><ul class="talep-ozet">${yeni.map(x => `<li>${avatar(x.kisi, 'kucuk')}<span>${esc(x.kisi.ad + ' ' + x.kisi.soyad)}</span>
+          <span class="durum-cip ${x.durum === 'kabul' ? 'yesil' : 'gri'}">${x.durum === 'kabul' ? 'Kabul etti' : 'Kabul etmedi'}</span></li>`).join('')}</ul>` : ''}`,
+      alt: `<button class="dugme ikincil" data-ac="kapat">Sonra</button><a class="dugme" href="#/talepler">${ikon('mesaj')}<span>Talepleri aç</span></a>`
+    });
+    return true;
   }
 
   // Yönetici listesi (asil olanlar işaretli) oturum boyunca önbellekte tutulur.
@@ -1394,7 +1552,11 @@
     const ad = adSoyad(k);
     const soru = ver ? `${ad} yönetici yapılacak: tüm kayıtları görebilecek, başvuruları onaylayıp duyuru yayınlayabilecek. Onaylıyor musunuz?`
       : `${ad} kişisinin yönetici yetkisi kaldırılacak; oturumu hemen kapanır ve bundan sonra ${ogretmen(k) ? 'öğretmen' : 'mezun'} olarak girer.`;
-    if (!await onayIste(soru, ver ? 'Yönetici yap' : 'Yetkiyi kaldır', !ver)) return;
+    if (!await onayIste(soru, ver ? 'Yönetici yap' : 'Yetkiyi kaldır', !ver, {
+      baslik: ver ? 'Yönetici yetkisi verilsin mi?' : 'Yönetici yetkisi kaldırılsın mı?', ikon: 'kalkan',
+      maddeler: ver ? ['Bir sonraki girişinde yönetici paneline erişir.', 'Yetkiyi yalnızca asil yöneticiler kaldırabilir.']
+        : ['Açık oturumu hemen kapanır.', 'Rehberdeki kaydı aynen kalır.']
+    })) return;
     try {
       if (ver) await Api.yoneticiYap(id); else await Api.yoneticiKaldir(k.eposta);
       await yoneticiBilgisi(true);
@@ -1546,6 +1708,14 @@
     });
     turDegisiminiBagla($katman.querySelector('form'));
     formuBagla($katman.querySelector('form'), async v => {
+      if (v.tur && v.tur !== (ogretmen(k) ? 'ogretmen' : 'mezun')) {
+        const ogr = v.tur === 'ogretmen';
+        if (!await onayIste(`${adSoyad(k)} ${ogr ? 'öğretmen' : 'mezun'} olarak kaydedilecek.`, ogr ? 'Öğretmen yap' : 'Mezun yap', false, {
+          baslik: 'Kullanıcı türü değişsin mi?', ikon: ogr ? 'ogretmen' : 'kep',
+          maddeler: ogr ? ['Rehberde “Öğretmen” etiketiyle ve branşıyla görünür.', 'Mesleği branşına göre “… Öğretmeni” olarak yazılır.']
+            : ['Rehberde mezun olarak, mezuniyet yılıyla görünür.']
+        })) return;
+      }
       await Api.profilKaydet(id, v);
       bildir('Kayıt güncellendi.', 'basarili');
       if (sonra) sonra(); else yonlendir();
@@ -2165,6 +2335,7 @@
       () => S.sifreOner ? (S.sifreOner = false, sifreOnerisi(), true) : false,
       () => uye ? profilTamamlaHatirlat() : false,
       () => bildirimTeklifi(),
+      () => uye ? iletisimKontrol() : false,
       () => uye ? duyuruKontrol().then(() => false) : false
     ]);
   }
@@ -2642,6 +2813,10 @@
         return listeyiCiz();
       case 'sifre-sifirla': return sifreIslemi(id, 'sifirla');
       case 'sifre-ver': return sifreIslemi(id, 'belirle');
+      case 'iletisim-talebi': return iletisimTalebiGonder(id);
+      case 'talep-kabul': return talepYanitla(id, 'kabul');
+      case 'talep-red': return talepYanitla(id, 'red');
+      case 'talep-geri': return talepYanitla(id, 'geri');
       case 'yonetici-yap': return yetkiIslemi(id, true);
       case 'yonetici-kaldir': return yetkiIslemi(id, false);
       case 'panel-yetki-kaldir': {
@@ -2658,6 +2833,13 @@
       case 'onayla': {
         const rol = onayRolu();
         if (rol === null) return;
+        if (rol.tur === 'ogretmen') {
+          const bk = await kayitGetir(id).catch(() => null);
+          if (!await onayIste(`${bk ? adSoyad(bk) : 'Bu kişi'} öğretmen olarak onaylanacak (branş: ${rol.brans}).`, 'Öğretmen olarak onayla', false, {
+            baslik: 'Öğretmen olarak onaylansın mı?', ikon: 'ogretmen',
+            maddeler: ['Rehberde “Öğretmen” etiketiyle görünür.', 'Mezun olarak başvurduysa bilgileri öğretmen kaydına çevrilir.']
+          })) return;
+        }
         const yontem = $katman.querySelector('[name="onayGiris"]:checked');
         const sifre = yontem && yontem.value === 'sifre' ? geciciSifreUret() : '';
         try {
@@ -2686,6 +2868,10 @@
         Api.demoSifirla(); S.filtre = { q: '', tur: '', calisma: '', cevrimici: false, yil: '', sehir: '', sirala: 'yil' }; S.duyurular = null;
         return git('#/');
       case 'cikis':
+        if (!await onayIste('Bu cihazda oturumunuz kapanacak.', 'Çıkış yap', false, {
+          baslik: 'Çıkış yapılsın mı?', ikon: 'cikis',
+          maddeler: ['Tekrar girmek için e-posta kodu ya da şifreniz gerekir.', 'Bu cihaza gelen telefon bildirimleri durur.']
+        })) return;
         await bildirimAboneliginiKaldir();
         await Api.cikis(); S.liste = []; S.basvurular = []; S.filtre = { q: '', tur: '', calisma: '', cevrimici: false, yil: '', sehir: '', sirala: 'yil' }; S.sayfa = 1; S.duyurular = null; S.acilisYapildi = false; S.gecmis = []; return git('#/');
       case 'kur':

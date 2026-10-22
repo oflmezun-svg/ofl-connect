@@ -276,6 +276,13 @@
 
   let D = depoOku(DEPO_ANAHTARI) || ilkDurum();
   const kaydet = () => depoYaz(DEPO_ANAHTARI, D);
+  // İletişim talepleri: demo mezunu (Elif Aydın) için örnek olarak bir bekleyen talep.
+  if (!D.iletisim) {
+    const elif = D.kayitlar.find(k => k.eposta === 'elif.aydin@example.com');
+    const isteyen = D.kayitlar.find(k => k.durum === 'onayli' && k.tur === 'mezun' && k !== elif);
+    D.iletisim = elif && isteyen ? [{ id: 'it-ornek', isteyen: isteyen.id, hedef: elif.id, durum: 'bekliyor', olusturma: new Date(Date.now() - 2 * 3600e3).toISOString(), yanit: '', goruldu: '' }] : [];
+  }
+  const telefonIzinleri = id => Object.fromEntries(D.iletisim.filter(t => t.isteyen === id && t.durum === 'kabul').map(t => [t.hedef, true]));
   const bul = id => D.kayitlar.find(k => k.id === id);
   const yeniId = on => on + Math.random().toString(36).slice(2, 10);
   const kucuk = e => String(e || '').trim().toLocaleLowerCase('tr-TR');
@@ -350,7 +357,7 @@
   }
 
   // Gizlilik maskesi: izin verilmeyen alan hiç gönderilmez.
-  function maskele(k, izleyen) {
+  function maskele(k, izleyen, izinler) {
     const tam = izleyen.rol === 'admin' || izleyen.id === k.id;
     const sonuc = {
       id: k.id, ad: k.ad, soyad: k.soyad, yil: k.yil, tur: k.tur,
@@ -364,6 +371,7 @@
     };
     for (const alan of ALANLAR) {
       if (tam || k.gorunurluk[alan]) Object.assign(sonuc, degerler[alan]);
+      else if (alan === 'telefon' && izinler && izinler[k.id]) { Object.assign(sonuc, degerler[alan]); sonuc.telefonIzinli = true; }
       else sonuc.gizli.push(alan);
     }
     if (tam) {
@@ -577,8 +585,9 @@
       const o = yetkiGerekli();
       await bekle(120);
       const cevrimici = o.rol === 'admin' ? new Set(cevrimiciIdler()) : null;
+      const izinler = o.rol === 'admin' ? null : telefonIzinleri(o.id);
       return D.kayitlar.filter(k => k.durum === 'onayli').map(k => {
-        const m = maskele(k, o);
+        const m = maskele(k, o, izinler);
         if (cevrimici) m.cevrimici = cevrimici.has(k.id);
         return m;
       });
@@ -588,9 +597,72 @@
       const o = yetkiGerekli();
       const k = bul(id);
       if (!k || (k.durum !== 'onayli' && o.rol !== 'admin')) throw hata('Kayıt bulunamadı.');
-      const m = maskele(k, o);
+      const m = maskele(k, o, o.rol === 'admin' ? null : telefonIzinleri(o.id));
       if (o.rol === 'admin') m.sifreVar = !!D.sifreler[k.eposta];
       return m;
+    },
+
+    // İletişim talepleri (sunucudaki iletisim*_ işlevlerinin demo karşılığı; bildirimler demoda gösterilmez)
+    async iletisimTalebi(id) {
+      const o = yetkiGerekli('uye');
+      await bekle(300);
+      const h = bul(id);
+      if (!h || h.durum !== 'onayli' || h.id === o.id) throw hata('Kişi bulunamadı.');
+      if (h.gorunurluk.telefon) return { durum: 'acik' };
+      const t = D.iletisim.find(x => x.isteyen === o.id && x.hedef === id);
+      if (t && (t.durum === 'bekliyor' || t.durum === 'kabul')) return { durum: t.durum };
+      if (t && t.durum === 'red' && Date.now() < Date.parse(t.yanit) + 7 * 864e5) throw hata('Bu kişi talebinizi kısa süre önce kabul etmedi. 7 gün sonra yeniden deneyebilirsiniz.');
+      const simdi = new Date().toISOString();
+      if (t) Object.assign(t, { durum: 'bekliyor', olusturma: simdi, yanit: '', goruldu: '' });
+      else D.iletisim.push({ id: yeniId('it'), isteyen: o.id, hedef: id, durum: 'bekliyor', olusturma: simdi, yanit: '', goruldu: '' });
+      kaydet();
+      return { durum: 'bekliyor' };
+    },
+
+    async iletisimDurumu(id) {
+      const o = yetkiGerekli('uye');
+      await bekle(150);
+      const h = bul(id);
+      if (!h) throw hata('Kişi bulunamadı.');
+      if (h.gorunurluk.telefon) return { durum: 'acik', telefon: h.telefon };
+      const t = D.iletisim.find(x => x.isteyen === o.id && x.hedef === id);
+      if (!t) return { durum: 'yok', telefonVar: !!h.telefon };
+      const r = { durum: t.durum, tarih: t.durum === 'bekliyor' ? t.olusturma : t.yanit, telefonVar: !!h.telefon };
+      if (t.durum === 'kabul') r.telefon = h.telefon;
+      if (t.durum === 'red') r.tekrar = new Date(Date.parse(t.yanit) + 7 * 864e5).toISOString();
+      return r;
+    },
+
+    async iletisimTalepleri() {
+      const o = yetkiGerekli('uye');
+      await bekle(200);
+      const kisi = id => { const k = bul(id); return k && k.durum === 'onayli' ? { id: k.id, ad: k.ad, soyad: k.soyad, yil: k.yil, tur: k.tur, brans: k.tur === 'ogretmen' ? k.brans : '' } : null; };
+      const gelen = D.iletisim.filter(t => t.hedef === o.id && (t.durum === 'bekliyor' || t.durum === 'kabul') && kisi(t.isteyen))
+        .map(t => ({ id: t.id, kisi: kisi(t.isteyen), durum: t.durum, olusturma: t.olusturma, yanit: t.yanit }));
+      const giden = D.iletisim.filter(t => t.isteyen === o.id && kisi(t.hedef))
+        .map(t => ({ id: t.id, kisi: kisi(t.hedef), durum: t.durum, olusturma: t.olusturma, yanit: t.yanit,
+          yeni: (t.durum === 'kabul' || t.durum === 'red') && !t.goruldu, tekrar: t.durum === 'red' ? new Date(Date.parse(t.yanit) + 7 * 864e5).toISOString() : '' }));
+      return { gelen, giden };
+    },
+
+    async iletisimYanit(id, kabul) {
+      const o = yetkiGerekli('uye');
+      await bekle(250);
+      const t = D.iletisim.find(x => x.id === id && x.hedef === o.id);
+      if (!t) throw hata('Talep bulunamadı.');
+      if (t.durum === 'bekliyor') t.durum = kabul ? 'kabul' : 'red';
+      else if (t.durum === 'kabul' && !kabul) t.durum = 'geri';
+      else return { durum: t.durum };
+      t.yanit = new Date().toISOString(); t.goruldu = '';
+      kaydet();
+      return { durum: t.durum };
+    },
+
+    async iletisimGoruldu() {
+      const o = yetkiGerekli('uye');
+      D.iletisim.forEach(t => { if (t.isteyen === o.id && (t.durum === 'kabul' || t.durum === 'red') && !t.goruldu) t.goruldu = new Date().toISOString(); });
+      kaydet();
+      return { ok: true };
     },
 
     async cevrimici() { yetkiGerekli('admin'); return cevrimiciIdler(); },
