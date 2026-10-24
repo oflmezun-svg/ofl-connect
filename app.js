@@ -928,7 +928,7 @@
             <p><strong>İşlenen veriler:</strong> Ad-soyad, mezuniyet yılı, çalışma durumu, üniversite ve bölüm, meslek, kurum ve uzmanlık alanı, şehir, telefon ve e-posta.</p>
             <p><strong>Amaç:</strong> Mezunlar arasında iletişim ağı kurmak; okul etkinlikleri, kariyer günleri ve mentorluk çalışmaları için mezunlara ulaşmak.</p>
             <p><strong>Kimler görebilir:</strong> Okul yönetiminin belirlediği sistem yöneticileri tüm bilgilerinizi görür. Diğer kullanıcılar yalnızca ad-soyadınızı, mezuniyet yılınızı ve sizin “Görünür” olarak işaretlediğiniz bilgileri görebilir. Bilgileriniz üçüncü kişilere verilmez.</p>
-            <p><strong>Saklama:</strong> Veriler Google'ın bulut hizmetlerinde (Google E-Tablolar) saklanır; bu hizmetin sunucuları yurt dışında bulunabilir. Reddedilen başvurular ${30} gün sonra kalıcı olarak silinir.</p>
+            <p><strong>Saklama:</strong> Veriler Google'ın bulut hizmetlerinde (Google E-Tablolar) saklanır; bu hizmetin sunucuları yurt dışında bulunabilir. Reddedilen başvurular ${30} gün, yönetici tarafından silinen kayıtlar 3 gün sonra kalıcı olarak silinir.</p>
             <p><strong>Haklarınız:</strong> 6698 sayılı KVKK'nın 11. maddesi uyarınca bilgilerinizi istediğiniz zaman güncelleyebilir, görünürlüğünü değiştirebilir veya silinmesini talep edebilirsiniz.</p>
           </div>
         </details>
@@ -1748,9 +1748,41 @@
   async function kayitSil(id) {
     let k;
     try { k = await kayitGetir(id); } catch (e) { return hataGoster(e); }
-    if (!await onayIste(`${adSoyad(k)} kaydı ve tüm bilgileri kalıcı olarak silinecek. Bu işlem geri alınamaz.`, 'Kalıcı olarak sil', true)) return;
-    try { await Api.sil(id); bildir('Kayıt silindi.', 'basarili'); yonlendir(); }
-    catch (e) { hataGoster(e); }
+    const uye = k.durum === 'onayli';
+    const sil = await sebepIste({
+      baslik: uye ? 'Kişiyi sil' : 'Başvuruyu sil', dugme: 'Sil', etiket: 'Silinme sebebi (kişiye iletilecek açıklama)',
+      metin: `${adSoyad(k)} ${uye ? 'rehberden kaldırılacak ve giriş yapamayacak' : 'başvurusu silinecek'}.`,
+      maddeler: ['Kayıt 3 gün boyunca Yönetim Paneli → “Silinen kişiler” bölümünde saklanır; bu sürede geri alabilirsiniz.',
+        '3 gün içinde geri alınmazsa tüm bilgileri kalıcı olarak silinir.'],
+      ornek: 'Örn. Aynı kişiye ait ikinci kayıt olduğu için silindi.',
+      deger: k.silmeTalebi ? 'Silme talebiniz üzerine hesabınız ve bilgileriniz silindi.' : '',
+      kutu: 'Açıklamayı kişiye e-postayla gönder', kutuSecili: !!k.eposta && k.durum !== 'reddedildi'
+    });
+    if (!sil) return;
+    try {
+      const r = await Api.sil(id, sil.sebep, sil.bildir);
+      bildir(`${adSoyad(k)} silindi${r && r.bildirildi ? ' ve kişiye e-posta gönderildi' : ''}. 3 gün içinde Yönetim Paneli → “Silinen kişiler”den geri alabilirsiniz.`, 'basarili');
+      yonlendir();
+    } catch (e) { hataGoster(e); }
+  }
+
+  async function silmeyiGeriAl(id) {
+    const s = (S.silinenler || []).find(x => x.id === id);
+    if (!s) return;
+    const ad = s.ad + ' ' + s.soyad;
+    const uye = s.onceki === 'onayli';
+    if (!await onayIste(`${ad} silinmeden önceki haliyle geri yüklenecek.`, 'Geri al', false, {
+      baslik: 'Silme geri alınsın mı?', ikon: 'yenile',
+      maddeler: [uye ? 'Rehberde yeniden görünür ve eski bilgileriyle giriş yapabilir.' : 'Başvurusu yeniden “Başvurular” sayfasına düşer.',
+        s.eposta ? (uye ? 'Kişiye “Hesabınız tekrardan aktive edilmiştir” e-postası gider.' : 'Kişiye başvurusunun geri yüklendiği e-postayla bildirilir.') : 'Kayıtlı e-postası olmadığı için bildirim gitmez.']
+        .concat(s.yoneticiydi ? [S.asil ? 'Yönetici yetkisi de geri verilir.' : 'Yönetici yetkisini yalnızca asil yöneticiler geri verebilir.'] : [])
+    })) return;
+    try {
+      const r = await Api.silmeyiGeriAl(id);
+      bildir(`${ad} geri alındı${r.bildirildi ? (uye ? ' ve kişiye “Hesabınız tekrardan aktive edilmiştir” e-postası gönderildi' : ' ve kişiye e-postayla bildirildi') : ''}.` +
+        (r.yetki ? ' Yönetici yetkisi de geri verildi.' : r.yetkiKaldi ? ' Yönetici yetkisini asil bir yöneticinin yeniden vermesi gerekir.' : ''), 'basarili');
+      panelEkrani().catch(hataGoster);
+    } catch (e) { hataGoster(e); }
   }
 
   /* =====================================================================
@@ -2003,21 +2035,31 @@
 
   // Red penceresi: sebep yazılır, istenirse başvurana e-postayla iletilir.
   function redSebebiIste(ad) {
+    return sebepIste({
+      baslik: 'Başvuruyu reddet', dugme: 'Reddet', etiket: 'Red sebebi', kutu: 'Red sebebini başvurana e-postayla gönder',
+      metin: `${ad} adlı kişinin başvurusu reddedilecek. Yanlışlıkla reddederseniz “Reddedilenler” sekmesinden 30 gün içinde geri alabilirsiniz.`,
+      ornek: 'Örn. Mezuniyet yılı okul kayıtlarımızla uyuşmuyor. Bilgilerinizi kontrol ederek yeniden başvurabilirsiniz.'
+    });
+  }
+
+  // Açıklama isteyen pencere (red, silme): { baslik, metin, maddeler, etiket, ornek, deger, kutu, kutuSecili, dugme }
+  function sebepIste(o) {
     return new Promise(coz => {
       const odak = document.activeElement;
       $onay.innerHTML = `<div class="perde"></div>
-        <form class="diyalog genis-diyalog" role="dialog" aria-modal="true" aria-label="Başvuruyu reddet">
-          <h3>Başvuruyu reddet</h3>
-          <p class="soluk kucuk-yazi">${esc(ad)} adlı kişinin başvurusu reddedilecek. Yanlışlıkla reddederseniz “Reddedilenler” sekmesinden 30 gün içinde geri alabilirsiniz.</p>
+        <form class="diyalog genis-diyalog" role="dialog" aria-modal="true" aria-label="${esc(o.baslik)}">
+          <h3>${esc(o.baslik)}</h3>
+          <p class="soluk kucuk-yazi">${esc(o.metin)}</p>
+          ${o.maddeler ? `<ul class="onay-maddeler">${o.maddeler.map(m => `<li>${esc(m)}</li>`).join('')}</ul>` : ''}
           <div class="alan">
-            <label for="red-sebebi">Red sebebi</label>
-            <textarea id="red-sebebi" name="sebep" rows="4" maxlength="1000" placeholder="Örn. Mezuniyet yılı okul kayıtlarımızla uyuşmuyor. Bilgilerinizi kontrol ederek yeniden başvurabilirsiniz."></textarea>
+            <label for="sebep-alani">${esc(o.etiket)}</label>
+            <textarea id="sebep-alani" name="sebep" rows="4" maxlength="1000" placeholder="${esc(o.ornek)}">${esc(o.deger || '')}</textarea>
             <em class="alan-hata" data-hata="sebep"></em>
           </div>
-          <label class="onay-kutusu"><input type="checkbox" name="bildir" checked><span>Red sebebini başvurana e-postayla gönder</span></label>
+          ${o.kutu ? `<label class="onay-kutusu"><input type="checkbox" name="bildir" ${o.kutuSecili === false ? '' : 'checked'}><span>${esc(o.kutu)}</span></label>` : ''}
           <div class="diyalog-dugmeleri">
             <button type="button" class="dugme ikincil" data-onay="hayir">Vazgeç</button>
-            <button type="submit" class="dugme tehlike">Reddet</button>
+            <button type="submit" class="dugme tehlike">${esc(o.dugme)}</button>
           </div>
         </form>`;
       $onay.classList.add('acik');
@@ -2031,11 +2073,12 @@
       f.addEventListener('submit', ev => {
         ev.preventDefault();
         const sebep = f.sebep.value.trim();
-        if (f.bildir.checked && sebep.length < 5) {
-          f.querySelector('[data-hata="sebep"]').textContent = 'E-postayla gönderilecekse kısa bir sebep yazın.';
+        const bildir = !!(f.bildir && f.bildir.checked);
+        if (bildir && sebep.length < 5) {
+          f.querySelector('[data-hata="sebep"]').textContent = 'E-postayla gönderilecekse kısa bir açıklama yazın.';
           return f.sebep.focus();
         }
-        bitir({ sebep, bildir: f.bildir.checked });
+        bitir({ sebep, bildir });
       });
       $onay.onclick = ev => { if (ev.target.closest('[data-onay="hayir"]') || ev.target.classList.contains('perde')) bitir(null); };
     });
@@ -2686,7 +2729,8 @@
   async function panelEkrani() {
     const ic = byId('icerik');
     ic.innerHTML = sayfaBasi('Yönetim Paneli', 'Genel görünüm ve yönetim araçları') + yukleniyor();
-    const [ist, yoneticiler] = await Promise.all([Api.istatistik(), yoneticiBilgisi(true).catch(() => [])]);
+    const [ist, yoneticiler, silinenler] = await Promise.all([Api.istatistik(), yoneticiBilgisi(true).catch(() => []), Api.silinenler().catch(() => [])]);
+    S.silinenler = silinenler;
     const enCok = Math.max(...ist.yillar.map(y => y.adet), 1);
     const sehirMax = ist.sehirler[0] ? ist.sehirler[0].adet : 1;
     const yuzde = n => ist.toplam ? Math.round(n / ist.toplam * 100) : 0;
@@ -2704,6 +2748,8 @@
         <a class="stat ${ist.silmeTalebi ? 'dikkat' : ''}" href="#/basvurular" data-sekme-git="silme"><span class="stat-etiket">${ikon('cop', 'kucuk')} Silme talebi</span><span class="stat-deger">${ist.silmeTalebi}</span><span class="stat-alt">${ist.silmeTalebi ? 'İşlemek için tıklayın' : 'Bekleyen talep yok'}</span></a>
         <div class="stat"><span class="stat-etiket">${ikon('telefon', 'kucuk')} Telefonunu paylaşan</span><span class="stat-deger">%${yuzde(ist.telefonPaylasan)}</span><span class="stat-alt">E-postasını paylaşan %${yuzde(ist.epostaPaylasan)}</span></div>
       </div>
+
+      ${silinenlerBolumu(silinenler)}
 
       <div class="panel-izgara">
         <div class="kart">
@@ -2752,6 +2798,34 @@
       </div>`;
   }
 
+  // Silinen kişiler: 3 gün geri alınabilir, sonra sunucu kaydı tamamen siler.
+  function silinenlerBolumu(liste) {
+    const kalan = s => {
+      const ms = Math.max(0, new Date(s.silinecek) - Date.now());
+      const gun = Math.floor(ms / 864e5), saat = Math.floor(ms % 864e5 / 36e5);
+      return gun ? `${gun} gün ${saat} saat` : saat ? `${saat} saat` : '1 saatten az';
+    };
+    const kim = s => s.tur === 'ogretmen' ? (s.brans ? s.brans + ' öğretmeni' : 'Öğretmen') : s.yil ? s.yil + ' mezunu' : 'Mezun';
+    const onceki = { onayli: '', beklemede: 'Başvuru', reddedildi: 'Reddedilmiş başvuru' };
+    return `<section class="kart silinen-bolum" id="silinen-kisiler" aria-labelledby="silinen-baslik">
+      <h3 id="silinen-baslik">${ikon('cop', 'kucuk')} Silinen kişiler ${liste.length ? `<span class="sayac">${liste.length}</span>` : ''}</h3>
+      <p class="soluk kucuk-yazi">Silinen kayıtlar 3 gün burada saklanır. Yanlışlıkla silindiyse <strong>Geri al</strong>’a basın: kişi eski bilgileriyle geri gelir ve kendisine “Hesabınız tekrardan aktive edilmiştir” e-postası gider. 3 gün içinde geri alınmayan kayıt veritabanından tamamen silinir.</p>
+      ${liste.length ? `<ul class="silinen-listesi">${liste.map(s => `<li>
+        <div class="silinen-kisi">${avatar(s)}<span><strong>${esc(s.ad + ' ' + s.soyad)}</strong>
+          <small>${esc(kim(s))}${onceki[s.onceki] ? ' · ' + onceki[s.onceki] : ''}${s.kvkk ? ' · KVKK talebi' : ''}${s.yoneticiydi ? ' · Yöneticiydi' : ''}</small>
+          <small>${esc(s.eposta || 'E-posta yok')}</small></span></div>
+        <div class="silinen-ayrinti">
+          <small>${new Date(s.tarih).toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })} · <strong>${esc(s.silen || 'bir yönetici')}</strong> sildi${s.bildirildi ? ' · e-postayla bildirildi' : ''}</small>
+          ${s.sebep ? `<p class="silinen-sebep">${esc(s.sebep)}</p>` : '<small class="soluk">Açıklama yazılmadı.</small>'}
+        </div>
+        <div class="silinen-eylem">
+          <span class="durum-cip turuncu">${ikon('saat', 'kucuk')}${kalan(s)} sonra tamamen silinecek</span>
+          <button class="dugme ikincil kucuk" data-ac="silme-geri-al" data-id="${esc(s.id)}">${ikon('yenile', 'kucuk')}<span>Geri al</span></button>
+        </div></li>`).join('')}</ul>`
+        : `<p class="silinen-bos">${ikon('tamam', 'kucuk')} Son 3 günde silinen kişi yok.</p>`}
+    </section>`;
+  }
+
   async function csvIndir() {
     try {
       bildir('Liste hazırlanıyor…');
@@ -2781,6 +2855,7 @@
       case 'duzenle': return mezunDuzenle(id);
       case 'basvuru-duzenle': return mezunDuzenle(id, () => basvuruIncele(id));
       case 'sil': ev.stopPropagation(); return kayitSil(id);
+      case 'silme-geri-al': return silmeyiGeriAl(id);
       case 'yeni': return kullaniciEkle();
       case 'hesap': return hesapAc();
       case 'duyuru-yeni': return duyuruEditoru();

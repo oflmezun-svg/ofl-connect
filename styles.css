@@ -943,3 +943,22 @@ tr.cevrimici .avatar::after { content: ""; position: absolute; right: -1px; bott
 .talep-ozet { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
 .talep-ozet li { display: flex; align-items: center; gap: 10px; }
 .talep-ozet li .durum-cip { margin-left: auto; }
+
+/* ---------- silinen kişiler (yönetim paneli) ---------- */
+.silinen-bolum { display: grid; gap: 10px; margin-bottom: 16px; }
+.silinen-bolum h3 { margin: 0; display: flex; align-items: center; gap: 8px; }
+.silinen-bolum > p { margin: 0; }
+.silinen-listesi { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.silinen-listesi > li { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(220px, 1.4fr) auto; gap: 12px 16px; align-items: center; padding: 12px; border: 1px solid var(--cizgi); border-radius: 12px; }
+.silinen-kisi { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.silinen-kisi > span { display: grid; min-width: 0; }
+.silinen-kisi small { color: var(--soluk); overflow-wrap: anywhere; }
+.silinen-ayrinti { display: grid; gap: 4px; min-width: 0; }
+.silinen-ayrinti small { color: var(--metin-2); font-size: .8rem; }
+.silinen-sebep { margin: 0; padding: 6px 10px; border-left: 3px solid var(--tehlike); background: var(--yuzey-2); border-radius: 6px; font-size: .88rem; white-space: pre-line; overflow-wrap: anywhere; }
+.silinen-eylem { display: grid; gap: 8px; justify-items: end; }
+.silinen-bos { display: flex; gap: 6px; align-items: center; margin: 0; color: var(--soluk); font-size: .9rem; }
+@media (max-width: 760px) {
+  .silinen-listesi > li { grid-template-columns: 1fr; }
+  .silinen-eylem { justify-items: stretch; grid-template-columns: 1fr auto; align-items: center; }
+}

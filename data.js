@@ -883,18 +883,55 @@
       return D.kayitlar.filter(k => k.durum === 'reddedildi').map(k => maskele(k, o));
     },
 
-    async sil(id) {
+    // Silinen kayıt 3 gün "Silinen kişiler"de bekler (sunucudaki sil_ / silmeyiGeriAl_ karşılığı; demoda e-posta gönderilmez).
+    async sil(id, sebep, bildir) {
       const o = yetkiGerekli('admin');
+      sebep = String(sebep || '').trim();
+      if (bildir && sebep.length < 5) throw hata('E-postayla gönderilecekse kısa bir açıklama yazın.');
       await bekle(200);
       const i = D.kayitlar.findIndex(k => k.id === id);
       if (i < 0) throw hata('Kayıt bulunamadı.');
       const k = D.kayitlar[i];
+      const yoneticiydi = yoneticiMi(k.eposta) && !asilMi(k.eposta);
       D.kayitlar.splice(i, 1);
+      D.silinenler = D.silinenler || [];
+      D.silinenler.unshift({ kayit: k, tarih: new Date().toISOString(), silen: o.eposta, sebep, bildirildi: !!(bildir && k.eposta), yoneticiydi });
       if (k.tur === 'ogretmen' && k.eposta !== o.eposta && D.yoneticiler.length > 1) {
         D.yoneticiler = D.yoneticiler.filter(y => y.eposta !== k.eposta);
       }
-      if (!yoneticiMi(k.eposta)) delete D.sifreler[k.eposta];
       kaydet();
+      return { silindi: true, bildirildi: !!(bildir && k.eposta), silinecek: new Date(Date.now() + 3 * 864e5).toISOString() };
+    },
+
+    async silinenler() {
+      yetkiGerekli('admin');
+      await bekle(150);
+      const sinir = Date.now() - 3 * 864e5;
+      const kalan = (D.silinenler || []).filter(s => Date.parse(s.tarih) >= sinir);
+      if (kalan.length !== (D.silinenler || []).length) {
+        (D.silinenler || []).filter(s => !kalan.includes(s)).forEach(s => { if (!yoneticiMi(s.kayit.eposta)) delete D.sifreler[s.kayit.eposta]; });
+        D.silinenler = kalan; kaydet();
+      }
+      const ad = e => { const y = D.yoneticiler.find(x => x.eposta === e); const k = D.kayitlar.find(x => x.eposta === e); return k ? k.ad + ' ' + k.soyad : y ? y.ad : e; };
+      return kalan.map(s => ({ id: s.kayit.id, ad: s.kayit.ad, soyad: s.kayit.soyad, eposta: s.kayit.eposta, yil: s.kayit.yil, tur: s.kayit.tur,
+        brans: s.kayit.brans, onceki: s.kayit.durum, kvkk: !!s.kayit.silmeTalebi, tarih: s.tarih, silen: ad(s.silen), sebep: s.sebep,
+        bildirildi: s.bildirildi, yoneticiydi: s.yoneticiydi, silinecek: new Date(Date.parse(s.tarih) + 3 * 864e5).toISOString() }));
+    },
+
+    async silmeyiGeriAl(id) {
+      const o = yetkiGerekli('admin');
+      await bekle(250);
+      const i = (D.silinenler || []).findIndex(s => s.kayit.id === id);
+      if (i < 0) throw hata('Silinen kayıt bulunamadı; 3 günlük saklama süresi dolmuş olabilir.');
+      const s = D.silinenler[i], k = s.kayit;
+      if (k.eposta && D.kayitlar.some(x => x.eposta === k.eposta && x.durum !== 'reddedildi')) throw hata('Bu e-posta adresiyle sonradan yeni bir kayıt açılmış. Geri almadan önce o kaydı inceleyin.');
+      if (telefonKullanimda(k.telefon, k.id)) throw hata('Bu telefon numarasıyla sonradan yeni bir kayıt açılmış. Geri almadan önce o kaydı inceleyin.');
+      D.kayitlar.push(k);
+      D.silinenler.splice(i, 1);
+      let yetki = false;
+      if (s.yoneticiydi && asilMi(o.eposta) && !yoneticiMi(k.eposta)) { D.yoneticiler.push({ eposta: k.eposta, ad: k.ad + ' ' + k.soyad }); yetki = true; }
+      kaydet();
+      return { id: k.id, durum: k.durum, bildirildi: !!k.eposta, yetki, yetkiKaldi: s.yoneticiydi && !yetki, sifreVar: !!D.sifreler[k.eposta] };
     },
 
     async yoneticiYap(id) {
@@ -945,6 +982,7 @@
         bekleyen: D.kayitlar.filter(k => k.durum === 'beklemede').length,
         reddedilen: D.kayitlar.filter(k => k.durum === 'reddedildi').length,
         silmeTalebi: D.kayitlar.filter(k => k.silmeTalebi).length,
+        silinen: (D.silinenler || []).length,
         telefonPaylasan, epostaPaylasan, epostaKotasi: 100,
         yillar: Object.entries(yillar).map(([yil, adet]) => ({ yil: +yil, adet })),
         sehirler: Object.entries(sehirler).map(([sehir, adet]) => ({ sehir, adet }))
