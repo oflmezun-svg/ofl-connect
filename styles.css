@@ -598,6 +598,23 @@ a.stat:hover { border-color: var(--marka-acik); }
 .duyuru-eylem { margin-left: auto; gap: 6px !important; }
 .duyuru-eylem .ikon { width: 15px; height: 15px; }
 .cekmece.orta .duyuru-kart { box-shadow: none; }
+.duyuru-paylasan { color: var(--metin-2); }
+.duyuru-paylasan strong { font-weight: 600; }
+.duyuru-red { display: flex; gap: 8px; align-items: flex-start; justify-self: stretch; padding: 10px 12px; border-left: 3px solid var(--kirmizi); background: var(--kirmizi-zemin); border-radius: 8px; font-size: .9rem; }
+.duyuru-red .ikon { color: var(--kirmizi); margin-top: 2px; flex: none; }
+.duyuru-red p { margin: 2px 0 0; white-space: pre-line; overflow-wrap: anywhere; color: var(--metin-2); }
+.talep-bolumu { display: grid; gap: 14px; max-width: 900px; margin: 0 0 16px; }
+.duyuru-listesi + .talep-bolumu { margin-top: 20px; }
+.talep-bolumu-bas { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.talep-bolumu-bas > div { flex: 1 1 280px; }
+.talep-bolumu-bas p { margin: 4px 0 0; }
+.talep-bolumu-ikon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--marka-zemin); color: var(--marka); flex: none; }
+.talep-bolumu .duyuru-kart { box-shadow: none; }
+.sekme[data-sekme="onay"] .sayac { background: var(--turuncu-zemin); border-color: transparent; color: var(--turuncu); font-weight: 700; }
+.talep-sonuc { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.talep-sonuc li { padding: 12px; border: 1px solid var(--cizgi); border-radius: 12px; }
+.talep-sonuc-bas { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.talep-sonuc p { margin: 6px 0 0; font-size: .92rem; overflow-wrap: anywhere; }
 
 .duyuru-duzen { display: grid; gap: 20px; }
 .duyuru-duzen .form-bolum:last-of-type { border-bottom: 0; padding-bottom: 0; }

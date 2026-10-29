@@ -20,7 +20,7 @@
     filtre: { q: '', tur: '', calisma: '', cevrimici: false, yil: '', sehir: '', sirala: 'yil' },
     sayfa: 1,
     basvuruSekmesi: 'onay',
-    duyuruSekmesi: 'aktif',
+    duyuruSekmesi: '',
     duyurular: null,
     acilisYapildi: false,
     sifreOner: false,
@@ -296,7 +296,7 @@
   function kabuk(aktif) {
     const admin = S.oturum.rol === 'admin';
     const rozet = y => y === 'basvurular' ? '<span class="menu-rozet" data-rozet hidden></span>'
-      : y === 'duyurular' && !admin ? '<span class="menu-rozet" data-duyuru-rozet hidden></span>'
+      : y === 'duyurular' ? (admin ? '<span class="menu-rozet" data-duyuru-talep-rozet hidden></span>' : '<span class="menu-rozet" data-duyuru-rozet hidden></span>')
       : y === 'talepler' ? '<span class="menu-rozet" data-talep-rozet hidden></span>' : '';
     const menuHtml = (MENU[S.oturum.rol] || MENU.mezun).map(([y, ad, ik]) =>
       `<a href="#/${y}" class="menu-ogesi ${y === aktif ? 'aktif' : ''}" ${y === aktif ? 'aria-current="page"' : ''}>
@@ -346,6 +346,8 @@
       const r = await Api.rozetler();
       const n = r.bekleyen + r.silme;
       document.querySelectorAll('[data-rozet]').forEach(el => { el.textContent = n; el.hidden = !n; });
+      const t = r.duyuruTalebi || 0;
+      document.querySelectorAll('[data-duyuru-talep-rozet]').forEach(el => { el.textContent = t; el.hidden = !t; });
     } catch (e) { /* rozet önemsiz; sessizce geç */ }
   }
 
@@ -837,9 +839,12 @@
    * Profil formu (kayıt, profil, yönetici düzenlemesi ve ekleme ortak)
    * ===================================================================== */
 
-  function yilSecenekleri(secili) {
+  // Yönetici, henüz mezun olmamış öğrencileri de ekleyebilsin diye önümüzdeki 5 yıl da listelenir;
+  // liste her yıl BU_YIL ile birlikte kendiliğinden kayar.
+  const ILERI_YIL = 5;
+  function yilSecenekleri(secili, ileri) {
     let s = '<option value="">Seçin</option>';
-    for (let y = OFL.BU_YIL; y >= OFL.ILK_YIL; y--) s += `<option ${+secili === y ? 'selected' : ''}>${y}</option>`;
+    for (let y = OFL.BU_YIL + (ileri ? ILERI_YIL : 0); y >= OFL.ILK_YIL; y--) s += `<option ${+secili === y ? 'selected' : ''}>${y}</option>`;
     return s;
   }
 
@@ -960,7 +965,7 @@
           <div class="alan-izgara">
             ${girdi(on, 'ad', 'Ad', k.ad, { zorunlu: true, ozellik: 'autocomplete="given-name" autocapitalize="words"' })}
             ${girdi(on, 'soyad', 'Soyad', k.soyad, { zorunlu: true, ozellik: 'autocomplete="family-name" autocapitalize="words"' })}
-            ${girdi(on, 'yil', 'Mezuniyet yılı', '', { zorunlu: true, secim: yilSecenekleri(k.yil), sinif: 'sadece-mezun' })}
+            ${girdi(on, 'yil', 'Mezuniyet yılı', '', { zorunlu: true, secim: yilSecenekleri(k.yil, turSecilir || +k.yil > OFL.BU_YIL), sinif: 'sadece-mezun' })}
             ${girdi(on, 'brans', 'Branş', tur === 'ogretmen' ? k.brans : '', { zorunlu: true, sinif: 'sadece-ogretmen', ozellik: 'list="brans-listesi" placeholder="Örn. Kimya"' })}
           </div>
         </fieldset>
@@ -2074,8 +2079,8 @@
         ev.preventDefault();
         const sebep = f.sebep.value.trim();
         const bildir = !!(f.bildir && f.bildir.checked);
-        if (bildir && sebep.length < 5) {
-          f.querySelector('[data-hata="sebep"]').textContent = 'E-postayla gönderilecekse kısa bir açıklama yazın.';
+        if ((o.zorunlu || bildir) && sebep.length < 5) {
+          f.querySelector('[data-hata="sebep"]').textContent = o.zorunlu ? 'Kısa bir açıklama yazın; öneren kişiye iletilecek.' : 'E-postayla gönderilecekse kısa bir açıklama yazın.';
           return f.sebep.focus();
         }
         bitir({ sebep, bildir });
@@ -2094,7 +2099,12 @@
     onemli: { ad: 'Önemli', ikon: 'duyuru', sinif: 'kirmizi' }
   };
   const HEDEF_ADI = { herkes: 'Herkes', mezun: 'Yalnızca mezunlar', ogretmen: 'Yalnızca öğretmenler' };
-  const DURUM_ADI = { aktif: ['Yayında', 'yesil'], planli: ['Planlandı', 'turuncu'], bitti: ['Süresi doldu', 'gri'] };
+  const DURUM_ADI = {
+    aktif: ['Yayında', 'yesil'], planli: ['Planlandı', 'turuncu'], bitti: ['Süresi doldu', 'gri'],
+    onay: ['Onay bekliyor', 'turuncu'], red: ['Onaylanmadı', 'kirmizi']
+  };
+  // Üyenin önerdiği duyurunun altında "Paylaşan: Ad Soyad · 2015 mezunu"
+  const paylasanYazisi = k => `${esc(adSoyad(k))} · ${esc(k.tur === 'ogretmen' ? (k.brans ? k.brans + ' öğretmeni' : 'Öğretmen') : k.yil + ' mezunu')}`;
 
   // Görülen duyurular cihazda kişi başına tutulur; bildirim penceresi her duyuru için yalnızca bir kez açılır.
   const gorulenAnahtari = () => 'ofl-duyuru-gorulen-' + S.oturum.id;
@@ -2157,24 +2167,35 @@
     const ust = [
       `<span class="durum-cip ${t.sinif}">${ikon(t.ikon, 'kucuk')}${t.ad}</span>`,
       ek.yeni ? '<span class="etiket">Yeni</span>' : '',
-      ek.admin && durum ? `<span class="durum-cip ${durum[1]}">${durum[0]}</span>` : '',
+      (ek.admin || ek.talep) && durum ? `<span class="durum-cip ${durum[1]}">${durum[0]}</span>` : '',
+      ek.talep && d.yeni ? '<span class="etiket">Yeni yanıt</span>' : '',
       ek.admin ? `<span class="durum-cip gri">${ikon('kisiler', 'kucuk')}${HEDEF_ADI[d.hedef] || 'Herkes'}</span>` : ''
     ].join('');
     const eposta = ek.admin ? epostaDurumuYazisi(d) : '';
-    const bildirimYazisi = ek.admin && /^\d{4}-/.test(d.bildirim || '') ? 'Telefon bildirimi gönderildi' : ek.admin && d.bildirim === 'bekliyor' ? 'Telefon bildirimi yayında gönderilecek' : '';
+    const talepte = d.durum === 'onay' || d.durum === 'red';
+    const bildirimYazisi = !ek.admin || talepte ? '' : /^\d{4}-/.test(d.bildirim || '') ? 'Telefon bildirimi gönderildi' : d.bildirim === 'bekliyor' ? 'Telefon bildirimi yayında gönderilecek' : '';
+    const eylemler = ek.admin ? (d.durum === 'onay'
+      ? `<button class="dugme ikincil kucuk" data-ac="duyuru-duzenle" data-id="${esc(d.id)}">${ikon('kalem')}<span>Düzenle</span></button>
+        <button class="dugme tehlike-cerceve kucuk" data-ac="duyuru-reddet" data-id="${esc(d.id)}">${ikon('kapat')}<span>Reddet</span></button>
+        <button class="dugme kucuk" data-ac="duyuru-onayla" data-id="${esc(d.id)}">${ikon('tamam')}<span>Onayla</span></button>`
+      : `${d.durum === 'red' ? '' : `<button class="dugme ikincil kucuk" data-ac="duyuru-duzenle" data-id="${esc(d.id)}">${ikon('kalem')}<span>Düzenle</span></button>`}
+        <button class="dugme tehlike-cerceve kucuk" data-ac="duyuru-sil" data-id="${esc(d.id)}">${ikon('cop')}<span>Sil</span></button>`)
+      : ek.talep && d.durum === 'onay' ? `<button class="dugme tehlike-cerceve kucuk" data-ac="duyuru-talep-sil" data-id="${esc(d.id)}">${ikon('kapat')}<span>Geri çek</span></button>`
+      : ek.talep && d.durum === 'red' ? `<button class="dugme ikincil kucuk" data-ac="duyuru-talep-sil" data-id="${esc(d.id)}">${ikon('cop')}<span>Kaldır</span></button>
+        <button class="dugme kucuk" data-ac="duyuru-yeniden" data-id="${esc(d.id)}">${ikon('kalem')}<span>Düzenleyip yeniden gönder</span></button>` : '';
     return `<article class="duyuru-kart tur-${esc(d.tur)}">
       <div class="duyuru-ust">${ust}</div>
       ${ek.sade ? '' : `<h3>${esc(d.baslik)}</h3>`}
       <div class="duyuru-metin">${duyuruMetni(d.metin)}</div>
+      ${d.redSebebi && d.durum === 'red' ? `<div class="duyuru-red">${ikon('bilgi', 'kucuk')}<div><strong>${ek.admin ? 'Red sebebi' : 'Yöneticinin açıklaması'}</strong><p>${esc(d.redSebebi)}</p></div></div>` : ''}
       ${d.baglantiUrl ? `<a class="dugme ikincil kucuk" href="${esc(d.baglantiUrl)}" target="_blank" rel="noopener"><span>${esc(d.baglantiMetni || 'Ayrıntılar')}</span>${ikon('dis')}</a>` : ''}
       <div class="duyuru-alt">
+        ${d.paylasan && !ek.talep ? `<span class="duyuru-paylasan">${ikon('kisi', 'kucuk')} ${d.durum === 'onay' ? 'Öneren' : 'Paylaşan'}: <strong>${paylasanYazisi(d.paylasan)}</strong></span>` : ''}
         <span>${ikon('takvim', 'kucuk')} ${tarihYaz(d.baslangic)}</span>
         <span>${ikon('saat', 'kucuk')} Son gün: ${tarihYaz(d.bitis)}</span>
         ${eposta ? `<span>${ikon('eposta', 'kucuk')} ${eposta}</span>` : ''}
         ${bildirimYazisi ? `<span>${ikon('zil', 'kucuk')} ${bildirimYazisi}</span>` : ''}
-        ${ek.admin ? `<span class="duyuru-eylem">
-          <button class="dugme ikincil kucuk" data-ac="duyuru-duzenle" data-id="${esc(d.id)}">${ikon('kalem')}<span>Düzenle</span></button>
-          <button class="dugme tehlike-cerceve kucuk" data-ac="duyuru-sil" data-id="${esc(d.id)}">${ikon('cop')}<span>Sil</span></button></span>` : ''}
+        ${eylemler ? `<span class="duyuru-eylem">${eylemler}</span>` : ''}
       </div>
     </article>`;
   }
@@ -2182,27 +2203,36 @@
   async function duyurularEkrani() {
     const admin = S.oturum.rol === 'admin';
     const ic = byId('icerik');
-    const alt = admin ? 'Duyuru hazırlayın, yayın süresini belirleyin, önemli olanları e-postayla da gönderin.' : 'Okul yönetiminden güncel duyurular';
+    const alt = admin ? 'Duyuru hazırlayın, yayın süresini belirleyin, üyelerin önerilerini onaylayın.' : 'Okuldan ve mezunlardan güncel duyurular';
     ic.innerHTML = sayfaBasi('Duyurular', alt) + yukleniyor();
-    const liste = await Api.duyurular();
+    const [liste, talepler] = await Promise.all([Api.duyurular(), admin ? null : Api.duyuruTaleplerim().catch(() => [])]);
 
     if (!admin) {
       S.duyurular = liste;
+      S.duyuruTalepleri = talepler;
       const onceki = new Set(gorulenler());
-      ic.innerHTML = sayfaBasi('Duyurular', alt) + bildirimKarti() + (liste.length
+      const oner = `<button class="dugme" data-ac="duyuru-talep">${ikon('arti')}<span>Duyuru öner</span></button>`;
+      const bolum = talepBolumu(talepler);
+      const oncelikli = talepler.some(d => d.yeni || d.durum === 'onay');
+      ic.innerHTML = sayfaBasi('Duyurular', alt, oner) + bildirimKarti() + (oncelikli ? bolum : '') + (liste.length
         ? `<div class="duyuru-listesi">${liste.map(d => duyuruKarti(d, { yeni: !onceki.has(d.id) })).join('')}</div>`
-        : `<div class="kart">${bosDurum('duyuru', 'Şu anda yayında duyuru yok', 'Yeni duyurular yayınlandığında burada görünür.')}</div>`);
+        : `<div class="kart">${bosDurum('duyuru', 'Şu anda yayında duyuru yok', 'Yeni duyurular yayınlandığında burada görünür. Bir etkinlik ya da önemli bir gelişme mi var? “Duyuru öner” ile paylaşın.')}</div>`) + (oncelikli ? '' : bolum);
       gorulduIsaretle(liste);
+      if (talepler.some(d => d.yeni)) Api.duyuruTalepGoruldu().catch(() => {});
       return;
     }
 
-    const gruplar = { aktif: [], planli: [], bitti: [] };
+    S.duyuruListesi = liste;
+    const gruplar = { onay: [], aktif: [], planli: [], bitti: [], red: [] };
     liste.forEach(d => (gruplar[d.durum] || gruplar.bitti).push(d));
     gruplar.planli.sort((a, b) => String(a.baslangic).localeCompare(String(b.baslangic)));
     gruplar.bitti.sort((a, b) => String(b.bitis).localeCompare(String(a.bitis)));
-    const sekme = S.duyuruSekmesi in gruplar ? S.duyuruSekmesi : 'aktif';
+    gruplar.onay.sort((a, b) => String(a.olusturma).localeCompare(String(b.olusturma)));
+    const sekme = S.duyuruSekmesi in gruplar ? S.duyuruSekmesi : gruplar.onay.length ? 'onay' : 'aktif';
     const sekmeDugmesi = (ad, yazi) => `<button role="tab" class="sekme ${sekme === ad ? 'aktif' : ''}" aria-selected="${sekme === ad}" data-ac="duyuru-sekme" data-sekme="${ad}">${yazi} <span class="sayac">${gruplar[ad].length}</span></button>`;
     const bos = {
+      onay: bosDurum('tamam', 'Onay bekleyen öneri yok', 'Mezun ve öğretmenlerin önerdiği duyurular yayınlanmadan önce burada onayınızı bekler.'),
+      red: bosDurum('kapat', 'Onaylanmayan öneri yok', 'Reddettiğiniz öneriler, öneren kişi listesinden kaldırana kadar burada görünür.'),
       aktif: bosDurum('duyuru', 'Yayında duyuru yok', 'Yeni bir duyuru hazırlayarak mezunlara ve öğretmenlere ulaşın.'),
       planli: bosDurum('takvim', 'Planlanmış duyuru yok', 'Başlangıcı ileri bir tarihe ayarlanan duyurular burada bekler.'),
       bitti: bosDurum('saat', 'Süresi dolan duyuru yok', 'Bitiş tarihi geçen duyurular kullanıcıların ekranından otomatik kaldırılır ve burada arşivlenir.')
@@ -2211,32 +2241,52 @@
     ic.innerHTML = `
       ${sayfaBasi('Duyurular', alt, `<button class="dugme" data-ac="duyuru-yeni">${ikon('arti')}<span>Yeni duyuru</span></button>`)}
       <div class="sekmeler" role="tablist">
-        ${sekmeDugmesi('aktif', 'Yayında')}${sekmeDugmesi('planli', 'Planlanan')}${sekmeDugmesi('bitti', 'Süresi dolan')}
+        ${gruplar.onay.length || sekme === 'onay' ? sekmeDugmesi('onay', 'Onay bekleyen') : ''}${sekmeDugmesi('aktif', 'Yayında')}${sekmeDugmesi('planli', 'Planlanan')}${sekmeDugmesi('bitti', 'Süresi dolan')}${gruplar.red.length || sekme === 'red' ? sekmeDugmesi('red', 'Onaylanmayan') : ''}
       </div>
       ${gruplar[sekme].length
         ? `<div class="duyuru-listesi">${gruplar[sekme].map(d => duyuruKarti(d, { admin: true })).join('')}</div>`
         : `<div class="kart">${bos}</div>`}
+      ${sekme === 'onay' && gruplar.onay.length ? `<p class="not">${ikon('bilgi', 'kucuk')} Üyelerin önerdiği duyurular onaylanana kadar kimseye görünmez. Gerekirse “Düzenle” ile metni ya da hedef kitleyi düzeltip sonra onaylayın. Reddederseniz yazdığınız açıklama öneren kişiye bildirim olarak gider.</p>` : ''}
       ${sekme === 'bitti' && gruplar.bitti.length ? `<p class="not">${ikon('bilgi', 'kucuk')} Bu duyurular kullanıcıların ekranından otomatik kaldırıldı; yalnızca siz görüyorsunuz. Bitiş tarihini ileri alarak yeniden yayınlayabilirsiniz.</p>` : ''}`;
   }
 
-  async function duyuruEditoru(id) {
+  // Üyenin kendi duyuru önerileri: ne olduğunu anlatan kısa açıklama ve önerilerin durumu
+  function talepBolumu(liste) {
+    return `<section class="kart talep-bolumu" aria-labelledby="talep-bolumu-baslik">
+      <div class="talep-bolumu-bas">
+        <span class="talep-bolumu-ikon">${ikon('duyuru')}</span>
+        <div><h2 class="bolum-baslik" id="talep-bolumu-baslik">Duyuru önerileriniz</h2>
+          <p class="soluk kucuk-yazi">Mezunlar buluşması, etkinlik, burs, staj ya da iş fırsatı gibi herkesin bilmesi gereken bir şey mi var? Duyuru olarak önerin. Okul yönetimi onaylayınca tüm mezun ve öğretmenler görür; bildirimleri açık olanların telefonuna bildirim gider. Sonucu size bildiririz.</p></div>
+        ${liste.length ? '' : `<button class="dugme ikincil" data-ac="duyuru-talep">${ikon('arti')}<span>Duyuru öner</span></button>`}
+      </div>
+      ${liste.length ? `<div class="duyuru-listesi">${liste.map(d => duyuruKarti(d, { talep: true })).join('')}</div>` : ''}
+    </section>`;
+  }
+
+  // talep: üyenin öneri formu (hedef kitle ve e-posta seçenekleri yok); kaynak: reddedilen öneriden yeniden başlat
+  async function duyuruEditoru(id, talep, kaynak) {
     let d = null;
     if (id) {
       try { d = (await Api.duyurular()).find(x => x.id === id); } catch (e) { return hataGoster(e); }
       if (!d) return bildir('Duyuru bulunamadı.', 'hata');
     }
+    const o = d || kaynak || null;
+    const benim = talep && S.liste ? S.liste.find(x => x.kendisi) : null;
     const simdi = new Date();
     const bas = d ? new Date(d.baslangic) : simdi;
     const bit = d ? new Date(d.bitis) : new Date(simdi.getTime() + 7 * 864e5);
-    const tur = d ? d.tur : 'bilgi';
+    const tur = o ? o.tur : 'bilgi';
     const hedef = d ? d.hedef : 'herkes';
     const epostaGitti = d && d.eposta;
     const radyo = (ad, deger, secili, yazi) => `<label><input type="radio" name="${ad}" value="${deger}" ${secili === deger ? 'checked' : ''}><span>${yazi}</span></label>`;
     const hata = ad => `<em class="alan-hata" data-hata="${ad}"></em>`;
 
     cekmeceAc({
-      etiket: d ? 'Duyuruyu düzenle' : 'Yeni duyuru', genis: true,
-      bas: `<div><h2>${d ? 'Duyuruyu düzenle' : 'Yeni duyuru'}</h2><p class="soluk">Duyuru, yayın aralığında mezunlara ve öğretmenlere gösterilir; süresi dolunca otomatik kaldırılır.</p></div>`,
+      etiket: talep ? 'Duyuru öner' : d ? 'Duyuruyu düzenle' : 'Yeni duyuru', genis: true,
+      bas: `<div><h2>${talep ? 'Duyuru öner' : d ? 'Duyuruyu düzenle' : 'Yeni duyuru'}</h2><p class="soluk">${talep
+        ? 'Duyurunuz önce okul yönetiminin onayına gider. Onaylanınca yayın aralığında tüm mezun ve öğretmenlere gösterilir; süresi dolunca otomatik kaldırılır.'
+        : d && d.durum === 'onay' && d.paylasan ? `Bu duyuruyu ${esc(adSoyad(d.paylasan))} önerdi. Gerekirse düzeltip kaydedin, ardından “Onayla” ile yayına alın.`
+        : 'Duyuru, yayın aralığında mezunlara ve öğretmenlere gösterilir; süresi dolunca otomatik kaldırılır.'}</p></div>`,
       govde: `<div class="duyuru-duzen">
         <form class="form duyuru-formu" id="duyuru-formu" novalidate>
           <fieldset class="form-bolum">
@@ -2245,22 +2295,22 @@
               <div class="segment">${Object.entries(DUYURU_TURU).map(([k, t]) => radyo('tur', k, tur, ikon(t.ikon, 'kucuk') + ' ' + t.ad)).join('')}</div>
             </div>
             <div class="alan"><label for="d-baslik">Başlık <span class="zorunlu" aria-hidden="true">*</span></label>
-              <input id="d-baslik" name="baslik" maxlength="120" value="${esc(d ? d.baslik : '')}" placeholder="Örn. Mezunlar Buluşması 2026" required>${hata('baslik')}</div>
+              <input id="d-baslik" name="baslik" maxlength="120" value="${esc(o ? o.baslik : '')}" placeholder="Örn. Mezunlar Buluşması 2026" required>${hata('baslik')}</div>
             <div class="alan"><label for="d-metin">Duyuru metni <span class="zorunlu" aria-hidden="true">*</span></label>
-              <textarea id="d-metin" name="metin" rows="7" maxlength="4000" placeholder="Duyurunuzu yazın. Boş bir satır yeni paragraf başlatır; web adresleri tıklanabilir olur." required>${esc(d ? d.metin : '')}</textarea>
+              <textarea id="d-metin" name="metin" rows="7" maxlength="4000" placeholder="Duyurunuzu yazın. Boş bir satır yeni paragraf başlatır; web adresleri tıklanabilir olur." required>${esc(o ? o.metin : '')}</textarea>
               <small class="alan-ipucu"><span data-sayac>0</span> / 4000 karakter</small>${hata('metin')}</div>
             <div class="alan-izgara">
               <div class="alan"><label for="d-url">Bağlantı <span class="soluk">(isteğe bağlı)</span></label>
-                <input id="d-url" name="baglantiUrl" type="url" inputmode="url" value="${esc(d ? d.baglantiUrl : '')}" placeholder="https://…">${hata('baglantiUrl')}</div>
+                <input id="d-url" name="baglantiUrl" type="url" inputmode="url" value="${esc(o ? o.baglantiUrl : '')}" placeholder="https://…">${hata('baglantiUrl')}</div>
               <div class="alan"><label for="d-url-metin">Bağlantı düğmesinin yazısı</label>
-                <input id="d-url-metin" name="baglantiMetni" maxlength="40" value="${esc(d ? d.baglantiMetni : '')}" placeholder="Örn. Katılım formu"></div>
+                <input id="d-url-metin" name="baglantiMetni" maxlength="40" value="${esc(o ? o.baglantiMetni : '')}" placeholder="Örn. Katılım formu"></div>
             </div>
           </fieldset>
           <fieldset class="form-bolum">
-            <legend>Kime ve ne zaman</legend>
-            <div class="alan"><label>Hedef kitle</label>
+            <legend>${talep ? 'Ne zaman' : 'Kime ve ne zaman'}</legend>
+            ${talep ? '' : `<div class="alan"><label>Hedef kitle</label>
               <div class="segment">${Object.entries(HEDEF_ADI).map(([k, a]) => radyo('hedef', k, hedef, a)).join('')}</div>
-            </div>
+            </div>`}
             <div class="alan-izgara">
               <div class="alan"><label for="d-bas">Yayın başlangıcı</label>
                 <input id="d-bas" name="baslangic" type="datetime-local" value="${yerelGirdi(bas)}" required>${hata('baslangic')}</div>
@@ -2272,8 +2322,9 @@
               ${[[1, '1 gün'], [3, '3 gün'], [7, '1 hafta'], [14, '2 hafta'], [30, '1 ay'], [90, '3 ay']].map(([g, y]) => `<button type="button" class="cip" data-sure="${g}">${y}</button>`).join('')}
             </div>
             <p class="alan-ipucu" data-sure-ozet></p>
+            ${talep ? `<p class="alan-ipucu">Önerilen duyurular en fazla 3 ay yayında kalabilir.</p>` : ''}
           </fieldset>
-          <fieldset class="form-bolum">
+          ${talep ? `<div class="bilgi-kutu">${ikon('bilgi', 'kucuk')}<span>Onaylanınca bildirimleri açık olan herkesin telefonuna “Yeni duyuru” bildirimi gider. Duyurunun altında adınız ve ${benim && benim.tur === 'ogretmen' ? 'branşınız' : 'mezuniyet yılınız'} “Paylaşan” olarak görünür.</span></div>` : `<fieldset class="form-bolum">
             <legend>Bildirim ve e-posta</legend>
             <label class="onay-kutusu">
               <input type="checkbox" name="bildirim" ${d && /^\d{4}-/.test(d.bildirim || '') ? 'checked disabled' : d && d.bildirim === 'yok' ? '' : 'checked'}>
@@ -2286,7 +2337,7 @@
                 <small>${epostaGitti ? esc(epostaDurumuYazisi(d)) + '.' : 'Duyuru, hedef kitledeki herkesin e-posta adresine de gider.'}
                 Ücretsiz Google hesabı günde yaklaşık 100 e-posta gönderebilir; e-postalar 45 kişilik gruplar halinde gizli alıcı (BCC) olarak gider, kota dolarsa kalanlar ertesi gün otomatik gönderilir. Yayın ileri bir tarihteyse e-posta yayın başlayınca gider.</small></span>
             </label>
-          </fieldset>
+          </fieldset>`}
         </form>
         <aside class="duyuru-onizleme" aria-label="Önizleme">
           <h3 class="bolum-baslik">Önizleme</h3>
@@ -2295,18 +2346,18 @@
         </aside>
       </div>`,
       alt: `<button class="dugme ikincil" type="button" data-ac="kapat">Vazgeç</button>
-        <button class="dugme" type="submit" form="duyuru-formu">${ikon(d ? 'tamam' : 'duyuru')}<span>${d ? 'Değişiklikleri kaydet' : 'Duyuruyu yayınla'}</span></button>`
+        <button class="dugme" type="submit" form="duyuru-formu">${ikon(d ? 'tamam' : 'duyuru')}<span>${talep ? 'Onaya gönder' : d ? 'Değişiklikleri kaydet' : 'Duyuruyu yayınla'}</span></button>`
     });
 
     const f = $katman.querySelector('.duyuru-formu');
     const zaman = v => { const t = new Date(v); return isNaN(t) ? '' : t.toISOString(); };
     const topla = () => ({
       id: d ? d.id : '',
-      baslik: f.baslik.value, metin: f.metin.value, tur: f.tur.value, hedef: f.hedef.value,
+      baslik: f.baslik.value, metin: f.metin.value, tur: f.tur.value, hedef: f.hedef ? f.hedef.value : 'herkes',
       baglantiUrl: f.baglantiUrl.value.trim(), baglantiMetni: f.baglantiMetni.value,
       baslangic: zaman(f.baslangic.value), bitis: zaman(f.bitis.value),
-      eposta: f.eposta.checked && !epostaGitti,
-      bildirim: f.bildirim.checked
+      eposta: !!f.eposta && f.eposta.checked && !epostaGitti,
+      bildirim: f.bildirim ? f.bildirim.checked : true
     });
     const guncelle = () => {
       const v = topla();
@@ -2314,7 +2365,7 @@
       $katman.querySelector('[data-onizleme]').innerHTML = duyuruKarti({
         tur: v.tur, baslik: v.baslik || 'Duyuru başlığı', metin: v.metin || 'Duyuru metni burada görünecek.',
         baglantiUrl: /^https?:\/\//i.test(v.baglantiUrl) ? v.baglantiUrl : '', baglantiMetni: v.baglantiMetni,
-        baslangic: v.baslangic, bitis: v.bitis
+        baslangic: v.baslangic, bitis: v.bitis, paylasan: benim || (d && d.paylasan)
       });
       const b = new Date(f.baslangic.value), s = new Date(f.bitis.value);
       const gun = (s - b) / 864e5;
@@ -2334,12 +2385,93 @@
     guncelle();
 
     formuBagla(f, async v => {
+      if (talep) {
+        if (!await onayIste('Duyurunuz okul yönetiminin onayına gönderilecek.', 'Onaya gönder', false, {
+          baslik: 'Duyuru onaya gönderilsin mi?', ikon: 'duyuru', maddeler: [
+            'Onaylanana kadar duyuruyu yalnızca siz ve yöneticiler görebilir.',
+            'Onaylanınca tüm mezun ve öğretmenler görür; altında adınız “Paylaşan” olarak yer alır.',
+            'Onaylanıp onaylanmadığı ve varsa red sebebi size bildirim olarak gelir.'] })) return;
+        await Api.duyuruTalebi(v);
+        bildir('Duyuru öneriniz yöneticilere iletildi. Sonucu size bildireceğiz.', 'basarili');
+        return git('#/duyurular');
+      }
       if (v.eposta && !await onayIste(`Duyuru, “${HEDEF_ADI[v.hedef]}” kitlesindeki herkese e-postayla da gönderilecek. Bu işlem geri alınamaz.`, 'Yayınla ve gönder')) return;
       const r = await Api.duyuruKaydet(v);
       bildir(d ? 'Duyuru güncellendi.' : r.durum === 'planli' ? 'Duyuru planlandı; başlangıç tarihinde yayına girecek.' : 'Duyuru yayınlandı.', 'basarili');
       S.duyuruSekmesi = r.durum;
       git('#/duyurular');
     }, topla);
+  }
+
+  const duyuruBul = id => (S.duyuruListesi || []).find(x => x.id === id) || {};
+
+  async function duyuruOnayla(id) {
+    const d = duyuruBul(id);
+    const kim = d.paylasan ? adSoyad(d.paylasan) : 'Öneren kişi';
+    const ileri = new Date(d.baslangic) > new Date();
+    if (!await onayIste(`“${d.baslik || 'Duyuru'}” yayına alınacak.`, 'Onayla ve yayınla', false, {
+      baslik: 'Duyuru onaylansın mı?', ikon: 'tamam', maddeler: [
+        ileri ? `Duyuru ${tarihSaat(d.baslangic)} tarihinde yayına girer.` : 'Duyuru hemen tüm mezun ve öğretmenlere görünür.',
+        'Bildirimleri açık olanların telefonuna “Yeni duyuru” bildirimi gider.',
+        `${kim}, duyurusunun onaylandığını bildirim olarak öğrenir.`] })) return;
+    try {
+      const r = await Api.duyuruOnayla(id);
+      bildir(r.durum === 'planli' ? 'Duyuru onaylandı; başlangıç tarihinde yayına girecek.' : 'Duyuru onaylandı ve yayınlandı.', 'basarili');
+      S.duyuruSekmesi = r.durum;
+    } catch (e) { hataGoster(e); }
+    rozetleriGuncelle();
+    yonlendir();
+  }
+
+  async function duyuruReddet(id) {
+    const d = duyuruBul(id);
+    const kim = d.paylasan ? adSoyad(d.paylasan) : 'öneren kişi';
+    const s = await sebepIste({
+      baslik: 'Duyuru önerisini reddet',
+      metin: `“${d.baslik || 'Duyuru'}” yayınlanmayacak. Yazdığınız açıklama ${kim} adlı kullanıcıya bildirim olarak gider; böylece duyurusunu düzeltip yeniden gönderebilir.`,
+      etiket: 'Red sebebi (öneren kişiye iletilir)', ornek: 'Örn. Etkinlik tarihi okul takvimiyle çakışıyor; lütfen başka bir tarih önerin.',
+      dugme: 'Reddet ve bildir', zorunlu: true
+    });
+    if (!s) return;
+    try {
+      await Api.duyuruReddet(id, s.sebep);
+      bildir('Öneri reddedildi; açıklamanız öneren kişiye iletildi.', 'basarili');
+    } catch (e) { hataGoster(e); }
+    rozetleriGuncelle();
+    yonlendir();
+  }
+
+  async function duyuruTalepSil(id) {
+    const d = (S.duyuruTalepleri || []).find(x => x.id === id) || {};
+    const bekliyor = d.durum === 'onay';
+    if (!await onayIste(bekliyor ? 'Öneriniz geri çekilecek ve yöneticilerin onay listesinden kaldırılacak.' : 'Onaylanmayan öneri listenizden kaldırılacak.',
+      bekliyor ? 'Geri çek' : 'Kaldır', true)) return;
+    try { await Api.duyuruTalebiSil(id); bildir(bekliyor ? 'Öneriniz geri çekildi.' : 'Öneri listenizden kaldırıldı.', 'basarili'); }
+    catch (e) { hataGoster(e); }
+    yonlendir();
+  }
+
+  // Açılışta: önerisi yanıtlanan üyeye sonucu gösterir (Duyurular sayfasındaysa sayfa zaten gösterir).
+  async function duyuruTalepKontrol() {
+    let t;
+    try { t = await Api.duyuruTaleplerim(); } catch (e) { return false; }
+    S.duyuruTalepleri = t;
+    const yeni = t.filter(x => x.yeni);
+    if (!yeni.length || location.hash.replace(/^#\/?/, '') === 'duyurular') return false;
+    Api.duyuruTalepGoruldu().catch(() => {});
+    const red = x => x.durum === 'red';
+    cekmeceAc({
+      etiket: 'Duyuru önerileriniz', orta: true,
+      bas: `<div><span class="ust-etiket">${ikon('duyuru', 'kucuk')} Duyuru önerileriniz</span>
+        <h2>${yeni.length > 1 ? 'Önerileriniz yanıtlandı' : red(yeni[0]) ? 'Öneriniz onaylanmadı' : 'Öneriniz onaylandı'}</h2></div>`,
+      govde: `<ul class="talep-sonuc">${yeni.map(x => `<li>
+          <div class="talep-sonuc-bas"><strong>${esc(x.baslik)}</strong><span class="durum-cip ${red(x) ? 'kirmizi' : 'yesil'}">${red(x) ? 'Onaylanmadı' : 'Onaylandı'}</span></div>
+          <p>${red(x) ? `<span class="soluk">Yöneticinin açıklaması:</span> ${esc(x.redSebebi)}`
+            : x.durum === 'planli' ? `${tarihSaat(x.baslangic)} tarihinde yayına girecek.` : 'Yayında; tüm mezun ve öğretmenler görebilir.'}</p></li>`).join('')}</ul>
+        ${yeni.some(red) ? `<p class="not">${ikon('bilgi', 'kucuk')} Duyurular sayfasından önerinizi düzenleyip yeniden gönderebilirsiniz.</p>` : ''}`,
+      alt: `<button class="dugme ikincil" data-ac="kapat">Tamam</button><a class="dugme" href="#/duyurular">${ikon('duyuru')}<span>Duyurulara git</span></a>`
+    });
+    return true;
   }
 
   async function duyuruSil(id) {
@@ -2379,6 +2511,7 @@
       () => uye ? profilTamamlaHatirlat() : false,
       () => bildirimTeklifi(),
       () => uye ? iletisimKontrol() : false,
+      () => uye ? duyuruTalepKontrol() : false,
       () => uye ? duyuruKontrol().then(() => false) : false
     ]);
   }
@@ -2861,6 +2994,11 @@
       case 'duyuru-yeni': return duyuruEditoru();
       case 'duyuru-duzenle': return duyuruEditoru(id);
       case 'duyuru-sil': return duyuruSil(id);
+      case 'duyuru-talep': return duyuruEditoru(null, true);
+      case 'duyuru-yeniden': return duyuruEditoru(null, true, (S.duyuruTalepleri || []).find(x => x.id === id));
+      case 'duyuru-talep-sil': return duyuruTalepSil(id);
+      case 'duyuru-onayla': return duyuruOnayla(id);
+      case 'duyuru-reddet': return duyuruReddet(id);
       case 'duyuru-sekme':
         S.duyuruSekmesi = el.dataset.sekme;
         return duyurularEkrani().catch(hataGoster);

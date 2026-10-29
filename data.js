@@ -282,6 +282,19 @@
     const isteyen = D.kayitlar.find(k => k.durum === 'onayli' && k.tur === 'mezun' && k !== elif);
     D.iletisim = elif && isteyen ? [{ id: 'it-ornek', isteyen: isteyen.id, hedef: elif.id, durum: 'bekliyor', olusturma: new Date(Date.now() - 2 * 3600e3).toISOString(), yanit: '', goruldu: '' }] : [];
   }
+  // Üye duyuru talepleri: yönetici ekranında görünsün diye onay bekleyen bir örnek.
+  if (!D.duyuruTalepOrnegi) {
+    D.duyuruTalepOrnegi = true;
+    const elif = D.kayitlar.find(k => k.eposta === 'elif.aydin@example.com');
+    const uye = D.kayitlar.filter(k => k.durum === 'onayli' && k.tur === 'mezun' && k !== elif)[3];
+    const sim = Date.now();
+    if (uye) D.duyurular.push({ id: 'd-talep-ornek', tur: 'etkinlik', hedef: 'herkes', baslik: 'Ankara\'daki mezunlarla kahvaltı',
+      metin: 'Ankara\'da yaşayan ya da okuyan mezunlarımızla ay sonunda Kızılay\'da bir kahvaltıda buluşmak istiyoruz. Tanışmak, iş ve staj fırsatlarını konuşmak için herkesi bekleriz.\n\nKatılmak isteyenler aşağıdaki formu doldurabilir.',
+      baglantiMetni: 'Katılım formu', baglantiUrl: 'https://example.com/ankara-kahvalti',
+      baslangic: new Date(sim).toISOString(), bitis: new Date(sim + 21 * 864e5).toISOString(), eposta: false,
+      olusturma: new Date(sim - 3 * 3600e3).toISOString(), onay: 'bekliyor', talepEden: uye.id, redSebebi: '', yanitTarihi: '', sonucGoruldu: '' });
+    kaydet();
+  }
   const telefonIzinleri = id => Object.fromEntries(D.iletisim.filter(t => t.isteyen === id && t.durum === 'kabul').map(t => [t.hedef, true]));
   const bul = id => D.kayitlar.find(k => k.id === id);
   const yeniId = on => on + Math.random().toString(36).slice(2, 10);
@@ -404,7 +417,7 @@
     if (temiz.calisma === 'calismiyor') Object.assign(temiz, { meslek: '', kurum: '', brans: '' });
     if (!temiz.ad) h.ad = 'Ad zorunludur.';
     if (!temiz.soyad) h.soyad = 'Soyad zorunludur.';
-    if (tur === 'mezun' && !(temiz.yil >= ILK_YIL && temiz.yil <= BU_YIL)) h.yil = 'Geçerli bir mezuniyet yılı seçin.';
+    if (tur === 'mezun' && !(temiz.yil >= ILK_YIL && temiz.yil <= BU_YIL + 5)) h.yil = 'Geçerli bir mezuniyet yılı seçin.';
     if (tur === 'ogretmen' && !temiz.brans) h.brans = 'Branş zorunludur.';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(temiz.eposta)) h.eposta = 'Geçerli bir e-posta adresi girin.';
     if (String(v.telefon || '').trim()) {
@@ -444,17 +457,49 @@
   }
 
   function duyuruDurumu(d, simdi) {
+    if (d.onay === 'bekliyor') return 'onay';
+    if (d.onay === 'red') return 'red';
     if (simdi < new Date(d.baslangic)) return 'planli';
     if (simdi > new Date(d.bitis)) return 'bitti';
     return 'aktif';
   }
   function duyuruCikti(d) {
-    const { olusturan, ...dis } = d; // eslint-disable-line no-unused-vars
+    const { olusturan, talepEden, sonucGoruldu, ...dis } = d; // eslint-disable-line no-unused-vars
+    const k = talepEden && D.kayitlar.find(x => x.id === talepEden);
+    if (k) dis.paylasan = { id: k.id, ad: k.ad, soyad: k.soyad, yil: k.yil, tur: k.tur, brans: k.tur === 'ogretmen' ? k.brans : '' };
     return dis;
+  }
+  function duyuruTalepCikti(d) {
+    return Object.assign(duyuruCikti(d), { durum: duyuruDurumu(d, new Date()), yeni: !!(d.yanitTarihi && !d.sonucGoruldu) });
   }
   function kuyrukDurumu(id) {
     const q = D.kuyruk[id];
     return q ? { toplam: q.toplam, gonderilen: q.gonderilen, bekleyen: q.toplam - q.gonderilen } : null;
+  }
+
+  function duyuruDogrula(v, talep) {
+    const h = {};
+    const metin = (x, n) => String(x == null ? '' : x).trim().slice(0, n);
+    const d = {
+      baslik: metin(v.baslik, 120),
+      metin: String(v.metin || '').replace(/\r\n/g, '\n').trim().slice(0, 4000),
+      tur: ['bilgi', 'etkinlik', 'onemli'].includes(v.tur) ? v.tur : 'bilgi',
+      hedef: ['herkes', 'mezun', 'ogretmen'].includes(v.hedef) ? v.hedef : 'herkes',
+      baglantiMetni: metin(v.baglantiMetni, 40), baglantiUrl: metin(v.baglantiUrl, 500),
+      baslangic: new Date(v.baslangic), bitis: new Date(v.bitis), eposta: !!v.eposta
+    };
+    if (!d.baslik) h.baslik = 'Başlık zorunludur.';
+    if (!d.metin) h.metin = 'Duyuru metni zorunludur.';
+    else if (talep && d.metin.length < 20) h.metin = 'Duyuruyu biraz daha ayrıntılı yazın (en az 20 karakter).';
+    if (d.baglantiUrl && !/^https?:\/\/\S+$/i.test(d.baglantiUrl)) h.baglantiUrl = 'Bağlantı http:// veya https:// ile başlamalıdır.';
+    if (isNaN(d.baslangic)) h.baslangic = 'Geçerli bir başlangıç tarihi seçin.';
+    if (isNaN(d.bitis)) h.bitis = 'Geçerli bir bitiş tarihi seçin.';
+    else if (!h.baslangic && d.bitis <= d.baslangic) h.bitis = 'Bitiş, başlangıçtan sonra olmalıdır.';
+    else if (d.bitis <= new Date()) h.bitis = 'Bitiş tarihi geçmişte olamaz.';
+    else if (talep && !h.baslangic && d.bitis - d.baslangic > 90 * 864e5) h.bitis = 'Duyuru en fazla 90 gün yayında kalabilir.';
+    if (Object.keys(h).length) throw dogrulamaHatasi(h);
+    if (d.baglantiUrl && !d.baglantiMetni) d.baglantiMetni = 'Ayrıntılar';
+    return d;
   }
 
   /* ---------- Api: arayüzün kullandığı tek kapı ---------- */
@@ -761,26 +806,7 @@
     async duyuruKaydet(v) {
       const o = yetkiGerekli('admin');
       await bekle(350);
-      const h = {};
-      const metin = (x, n) => String(x == null ? '' : x).trim().slice(0, n);
-      const d = {
-        baslik: metin(v.baslik, 120),
-        metin: String(v.metin || '').replace(/\r\n/g, '\n').trim().slice(0, 4000),
-        tur: ['bilgi', 'etkinlik', 'onemli'].includes(v.tur) ? v.tur : 'bilgi',
-        hedef: ['herkes', 'mezun', 'ogretmen'].includes(v.hedef) ? v.hedef : 'herkes',
-        baglantiMetni: metin(v.baglantiMetni, 40), baglantiUrl: metin(v.baglantiUrl, 500),
-        baslangic: new Date(v.baslangic), bitis: new Date(v.bitis), eposta: !!v.eposta
-      };
-      if (!d.baslik) h.baslik = 'Başlık zorunludur.';
-      if (!d.metin) h.metin = 'Duyuru metni zorunludur.';
-      if (d.baglantiUrl && !/^https?:\/\/\S+$/i.test(d.baglantiUrl)) h.baglantiUrl = 'Bağlantı http:// veya https:// ile başlamalıdır.';
-      if (isNaN(d.baslangic)) h.baslangic = 'Geçerli bir başlangıç tarihi seçin.';
-      if (isNaN(d.bitis)) h.bitis = 'Geçerli bir bitiş tarihi seçin.';
-      else if (!h.baslangic && d.bitis <= d.baslangic) h.bitis = 'Bitiş, başlangıçtan sonra olmalıdır.';
-      else if (d.bitis <= new Date()) h.bitis = 'Bitiş tarihi geçmişte olamaz.';
-      if (Object.keys(h).length) throw dogrulamaHatasi(h);
-      if (d.baglantiUrl && !d.baglantiMetni) d.baglantiMetni = 'Ayrıntılar';
-      const simdi = new Date().toISOString();
+      const d = duyuruDogrula(v);      const simdi = new Date().toISOString();
       const mevcut = v.id ? D.duyurular.find(x => x.id === v.id) : null;
       if (v.id && !mevcut) throw hata('Duyuru bulunamadı.');
       const k = Object.assign(mevcut || { id: yeniId('d'), olusturan: o.eposta, olusturma: simdi }, d, {
@@ -788,7 +814,7 @@
         eposta: d.eposta || !!(mevcut && mevcut.eposta)
       });
       if (!mevcut) D.duyurular.push(k);
-      if (k.eposta && !D.kuyruk[k.id]) {
+      if (k.eposta && !D.kuyruk[k.id] && !k.onay) {
         // Demo: gerçek sistemdeki günlük kotayı taklit eder (bugün 85 kişi, kalanı sonraki günlere).
         const toplam = D.kayitlar.filter(x => x.durum === 'onayli' && (k.hedef === 'herkes' || k.hedef === x.tur)).length;
         D.kuyruk[k.id] = { toplam, gonderilen: duyuruDurumu(k, new Date()) === 'aktif' ? Math.min(toplam, 85) : 0 };
@@ -812,8 +838,78 @@
       yetkiGerekli('admin');
       return {
         bekleyen: D.kayitlar.filter(k => k.durum === 'beklemede').length,
-        silme: D.kayitlar.filter(k => k.silmeTalebi).length
+        silme: D.kayitlar.filter(k => k.silmeTalebi).length,
+        duyuruTalebi: D.duyurular.filter(d => d.onay === 'bekliyor').length
       };
+    },
+
+    // Üyelerin duyuru talepleri (sunucudaki duyuruTalebi_ ve devamının karşılığı)
+    async duyuruTalebi(v) {
+      const o = yetkiGerekli('uye');
+      await bekle(350);
+      const d = duyuruDogrula(Object.assign({}, v, { hedef: 'herkes', eposta: false }), true);
+      const benim = D.duyurular.filter(x => x.talepEden === o.id);
+      if (benim.filter(x => x.onay === 'bekliyor').length >= 3) throw hata('Onay bekleyen 3 duyuru talebiniz var. Yöneticiler bunları yanıtlayınca yenisini gönderebilirsiniz.');
+      const bugun = new Date().toISOString().slice(0, 10);
+      if (benim.filter(x => String(x.olusturma).slice(0, 10) === bugun).length >= 5) throw hata('Bir günde en fazla 5 duyuru talebi gönderebilirsiniz.');
+      const simdi = new Date().toISOString();
+      const k = Object.assign({ id: yeniId('d'), olusturan: o.eposta, olusturma: simdi }, d, {
+        baslangic: d.baslangic.toISOString(), bitis: d.bitis.toISOString(), guncelleme: simdi, eposta: false,
+        onay: 'bekliyor', talepEden: o.id, redSebebi: '', yanitTarihi: '', sonucGoruldu: ''
+      });
+      D.duyurular.push(k);
+      kaydet();
+      return duyuruTalepCikti(k);
+    },
+
+    async duyuruTaleplerim() {
+      const o = yetkiGerekli('uye');
+      await bekle(150);
+      return D.duyurular.filter(d => d.talepEden === o.id).map(duyuruTalepCikti)
+        .sort((a, b) => String(b.olusturma).localeCompare(String(a.olusturma)));
+    },
+
+    async duyuruTalepGoruldu() {
+      const o = yetkiGerekli('uye');
+      const simdi = new Date().toISOString();
+      D.duyurular.forEach(d => { if (d.talepEden === o.id && d.yanitTarihi && !d.sonucGoruldu) d.sonucGoruldu = simdi; });
+      kaydet();
+      return { ok: true };
+    },
+
+    async duyuruTalebiSil(id) {
+      const o = yetkiGerekli('uye');
+      await bekle(200);
+      const i = D.duyurular.findIndex(d => d.id === id && d.talepEden === o.id);
+      if (i < 0) throw hata('Duyuru talebi bulunamadı.');
+      if (D.duyurular[i].onay !== 'bekliyor' && D.duyurular[i].onay !== 'red') throw hata('Yayınlanan duyuru yalnızca yöneticiler tarafından kaldırılabilir.');
+      D.duyurular.splice(i, 1);
+      kaydet();
+      return { silindi: true };
+    },
+
+    async duyuruOnayla(id) {
+      yetkiGerekli('admin');
+      await bekle(300);
+      const d = D.duyurular.find(x => x.id === id);
+      if (!d) throw hata('Duyuru talebi bulunamadı; üye talebi geri çekmiş olabilir.');
+      if (d.onay !== 'bekliyor') throw hata('Bu talep zaten yanıtlanmış.');
+      Object.assign(d, { onay: 'onayli', yanitTarihi: new Date().toISOString(), sonucGoruldu: '' });
+      kaydet();
+      return Object.assign(duyuruCikti(d), { durum: duyuruDurumu(d, new Date()) });
+    },
+
+    async duyuruReddet(id, sebep) {
+      yetkiGerekli('admin');
+      await bekle(300);
+      sebep = String(sebep || '').trim().slice(0, 1000);
+      if (sebep.length < 5) throw dogrulamaHatasi({ sebep: 'Red sebebini kısaca yazın; üyeye iletilecek.' });
+      const d = D.duyurular.find(x => x.id === id);
+      if (!d) throw hata('Duyuru talebi bulunamadı; üye talebi geri çekmiş olabilir.');
+      if (d.onay !== 'bekliyor') throw hata('Bu talep zaten yanıtlanmış.');
+      Object.assign(d, { onay: 'red', redSebebi: sebep, yanitTarihi: new Date().toISOString(), sonucGoruldu: '' });
+      kaydet();
+      return Object.assign(duyuruCikti(d), { durum: 'red' });
     },
 
     async bekleyenler() {

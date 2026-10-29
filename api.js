@@ -169,6 +169,12 @@
     kullaniciEkle: veri => cagir('kullaniciEkle', veri),
     yoneticiler: () => cagir('yoneticiler'),
     duyuruKaydet: veri => cagir('duyuruKaydet', veri),
-    duyuruSil: id => cagir('duyuruSil', { id })
+    duyuruSil: id => cagir('duyuruSil', { id }),
+    duyuruTalebi: veri => cagir('duyuruTalebi', veri),
+    duyuruTaleplerim: () => cagir('duyuruTaleplerim'),
+    duyuruTalepGoruldu: () => cagir('duyuruTalepGoruldu'),
+    duyuruTalebiSil: id => cagir('duyuruTalebiSil', { id }),
+    duyuruOnayla: id => cagir('duyuruOnayla', { id }),
+    duyuruReddet: (id, sebep) => cagir('duyuruReddet', { id, sebep })
   });
 })();
