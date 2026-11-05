@@ -979,3 +979,20 @@ tr.cevrimici .avatar::after { content: ""; position: absolute; right: -1px; bott
   .silinen-listesi > li { grid-template-columns: 1fr; }
   .silinen-eylem { justify-items: stretch; grid-template-columns: 1fr auto; align-items: center; }
 }
+
+/* Faz 16: giriş notu, yıl hedefli duyuru, talep kaydı silme */
+.giris-not { display: flex; gap: 8px; align-items: flex-start; margin: 4px 0 0; line-height: 1.45; }
+.giris-not .ikon { flex: none; margin-top: 2px; }
+.yil-secici { display: flex; flex-wrap: wrap; gap: 6px; max-height: 196px; overflow-y: auto; padding: 2px; }
+.yil-cipi { position: relative; }
+.yil-cipi input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.yil-cipi span { display: inline-block; min-width: 58px; text-align: center; border: 1px solid var(--cizgi-guclu); background: var(--yuzey); color: var(--metin-2); border-radius: 999px; padding: 6px 10px; font-size: .85rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.yil-cipi input:hover + span { border-color: var(--marka-acik); color: var(--marka); }
+.yil-cipi input:focus-visible + span { outline: 2px solid var(--marka-acik); outline-offset: 2px; }
+.yil-cipi input:checked + span { background: var(--marka); border-color: var(--marka); color: #fff; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .yil-cipi input:checked + span { color: #0c1220; } }
+:root[data-theme="dark"] .yil-cipi input:checked + span { color: #0c1220; }
+.hedef-segment { flex-wrap: wrap; }
+.talep-dugmeler { flex-wrap: wrap; align-items: center; justify-content: flex-end; }
+.talep-sil { color: var(--tehlike, #b0182a); }
+@media (max-width: 680px) { .talep-dugmeler { justify-content: flex-start; } .talep-dugmeler .dugme.talep-sil { flex: 0 0 auto; } }

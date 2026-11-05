@@ -160,6 +160,7 @@
     iletisimYanit: (id, kabul) => cagir('iletisimYanit', { id, kabul }),
     iletisimDurumu: id => cagir('iletisimDurumu', { id }),
     iletisimGoruldu: () => cagir('iletisimGoruldu'),
+    iletisimSil: id => cagir('iletisimSil', { id }),
     yoneticiKaldir: eposta => cagir('yoneticiKaldir', { eposta }),
     sil: (id, sebep, bildir) => cagir('sil', { id, sebep, bildir }),
     silinenler: () => cagir('silinenler'),

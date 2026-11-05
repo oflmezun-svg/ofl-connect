@@ -472,6 +472,14 @@
   function duyuruTalepCikti(d) {
     return Object.assign(duyuruCikti(d), { durum: duyuruDurumu(d, new Date()), yeni: !!(d.yanitTarihi && !d.sonucGoruldu) });
   }
+  // Duyuru bu kişiye gösterilir mi? (sunucudaki duyuruKime_ karşılığı)
+  function duyuruKime(d, k) {
+    if (!k) return false;
+    const tur = k.tur === 'ogretmen' ? 'ogretmen' : 'mezun';
+    if (d.hedef === 'herkes') return true;
+    if (d.hedef === 'yil') return tur === 'mezun' && (d.yillar || []).map(Number).includes(Number(k.yil));
+    return d.hedef === tur;
+  }
   function kuyrukDurumu(id) {
     const q = D.kuyruk[id];
     return q ? { toplam: q.toplam, gonderilen: q.gonderilen, bekleyen: q.toplam - q.gonderilen } : null;
@@ -484,10 +492,15 @@
       baslik: metin(v.baslik, 120),
       metin: String(v.metin || '').replace(/\r\n/g, '\n').trim().slice(0, 4000),
       tur: ['bilgi', 'etkinlik', 'onemli'].includes(v.tur) ? v.tur : 'bilgi',
-      hedef: ['herkes', 'mezun', 'ogretmen'].includes(v.hedef) ? v.hedef : 'herkes',
+      hedef: ['herkes', 'mezun', 'ogretmen', 'yil'].includes(v.hedef) ? v.hedef : 'herkes',
       baglantiMetni: metin(v.baglantiMetni, 40), baglantiUrl: metin(v.baglantiUrl, 500),
       baslangic: new Date(v.baslangic), bitis: new Date(v.bitis), eposta: !!v.eposta
     };
+    d.yillar = [];
+    if (d.hedef === 'yil') {
+      d.yillar = [...new Set((v.yillar || []).map(Number))].filter(y => y >= OFL.ILK_YIL && y <= OFL.BU_YIL + 5).sort((a, b) => a - b);
+      if (!d.yillar.length) h.yillar = 'En az bir mezuniyet yılı seçin.';
+    }
     if (!d.baslik) h.baslik = 'Başlık zorunludur.';
     if (!d.metin) h.metin = 'Duyuru metni zorunludur.';
     else if (talep && d.metin.length < 20) h.metin = 'Duyuruyu biraz daha ayrıntılı yazın (en az 20 karakter).';
@@ -543,15 +556,20 @@
       await bekle(300);
       eposta = kucuk(eposta);
       const say = sifreDenemeleri[eposta] || 0;
-      if (say >= 5) throw hata('Çok fazla hatalı deneme. 15 dakika sonra tekrar deneyin ya da e-posta koduyla giriş yapın.');
+      if (say >= 5) throw hata('Çok fazla hatalı deneme. 15 dakika sonra tekrar deneyin ya da “Şifremi unuttum” bağlantısıyla yeni şifre belirleyin.');
       const hedef = girisHedefi(eposta);
+      if (!hedef && D.sifreler[eposta] === String(sifre)) {
+        const b = D.kayitlar.find(x => x.eposta === eposta);
+        if (b && b.durum === 'beklemede') throw hata('Başvurunuz henüz okul yönetiminin onayını bekliyor. Onaylandığında e-postayla bilgilendirileceksiniz.');
+        if (b && b.durum === 'reddedildi') throw hata('Başvurunuz onaylanmadı. Bilgilerinizi kontrol ederek yeniden kayıt olabilirsiniz.');
+      }
       if (!hedef || D.sifreler[eposta] !== String(sifre)) {
         sifreDenemeleri[eposta] = say + 1;
         throw hata('E-posta veya şifre hatalı. Kalan deneme hakkı: ' + Math.max(0, 4 - say));
       }
       delete sifreDenemeleri[eposta];
       const verildi = D.degistirmeli[eposta];
-      if (typeof verildi === 'number' && Date.now() - verildi > 7 * 864e5) throw hata('Geçici şifrenizin süresi doldu (7 gün). Okul yönetiminden yeni şifre isteyin ya da e-posta koduyla giriş yapın.');
+      if (typeof verildi === 'number' && Date.now() - verildi > 7 * 864e5) throw hata('Geçici şifrenizin süresi doldu (7 gün). Okul yönetiminden yeni şifre isteyin ya da “Şifremi unuttum” bağlantısıyla kendi şifrenizi belirleyin.');
       return Object.assign(oturumAc(eposta, hedef, hatirla), { degistirmeli: !!D.degistirmeli[eposta] });
     },
 
@@ -658,7 +676,7 @@
       if (t && (t.durum === 'bekliyor' || t.durum === 'kabul')) return { durum: t.durum };
       if (t && t.durum === 'red' && Date.now() < Date.parse(t.yanit) + 7 * 864e5) throw hata('Bu kişi talebinizi kısa süre önce kabul etmedi. 7 gün sonra yeniden deneyebilirsiniz.');
       const simdi = new Date().toISOString();
-      if (t) Object.assign(t, { durum: 'bekliyor', olusturma: simdi, yanit: '', goruldu: '' });
+      if (t) Object.assign(t, { durum: 'bekliyor', olusturma: simdi, yanit: '', goruldu: '', silH: '', silI: '' });
       else D.iletisim.push({ id: yeniId('it'), isteyen: o.id, hedef: id, durum: 'bekliyor', olusturma: simdi, yanit: '', goruldu: '' });
       kaydet();
       return { durum: 'bekliyor' };
@@ -682,9 +700,9 @@
       const o = yetkiGerekli('uye');
       await bekle(200);
       const kisi = id => { const k = bul(id); return k && k.durum === 'onayli' ? { id: k.id, ad: k.ad, soyad: k.soyad, yil: k.yil, tur: k.tur, brans: k.tur === 'ogretmen' ? k.brans : '' } : null; };
-      const gelen = D.iletisim.filter(t => t.hedef === o.id && (t.durum === 'bekliyor' || t.durum === 'kabul') && kisi(t.isteyen))
+      const gelen = D.iletisim.filter(t => t.hedef === o.id && !t.silH && kisi(t.isteyen))
         .map(t => ({ id: t.id, kisi: kisi(t.isteyen), durum: t.durum, olusturma: t.olusturma, yanit: t.yanit }));
-      const giden = D.iletisim.filter(t => t.isteyen === o.id && kisi(t.hedef))
+      const giden = D.iletisim.filter(t => t.isteyen === o.id && !t.silI && kisi(t.hedef))
         .map(t => ({ id: t.id, kisi: kisi(t.hedef), durum: t.durum, olusturma: t.olusturma, yanit: t.yanit,
           yeni: (t.durum === 'kabul' || t.durum === 'red') && !t.goruldu, tekrar: t.durum === 'red' ? new Date(Date.parse(t.yanit) + 7 * 864e5).toISOString() : '' }));
       return { gelen, giden };
@@ -701,6 +719,22 @@
       t.yanit = new Date().toISOString(); t.goruldu = '';
       kaydet();
       return { durum: t.durum };
+    },
+
+    async iletisimSil(id) {
+      const o = yetkiGerekli('uye');
+      await bekle(200);
+      const t = D.iletisim.find(x => x.id === id && (x.hedef === o.id || x.isteyen === o.id));
+      if (!t) throw hata('Talep bulunamadı.');
+      if (t.durum === 'bekliyor') throw hata(t.hedef === o.id ? 'Bu talebi silmeden önce yanıtlayın.' : 'Yanıt bekleyen talep silinemez.');
+      const simdi = new Date().toISOString();
+      let izinKalkti = false;
+      if (t.hedef === o.id) {
+        if (t.durum === 'kabul') { t.durum = 'geri'; t.yanit = simdi; t.goruldu = ''; izinKalkti = true; }
+        t.silH = simdi;
+      } else { t.silI = simdi; if (!t.goruldu) t.goruldu = simdi; }
+      kaydet();
+      return { silindi: true, izinKalkti };
     },
 
     async iletisimGoruldu() {
@@ -746,16 +780,25 @@
       await bekle(400);
       const { temiz, hatalar } = dogrula(Object.assign({}, veri, { tur: 'mezun' }), true);
       const eski = D.kayitlar.find(k => k.eposta === temiz.eposta);
-      if (!hatalar.eposta && ((eski && eski.durum !== 'reddedildi') || yoneticiMi(temiz.eposta))) hatalar.eposta = 'Bu e-posta ile zaten bir kayıt var.';
+      if (!hatalar.eposta && ((eski && eski.durum !== 'reddedildi') || yoneticiMi(temiz.eposta))) hatalar.eposta = 'Bu e-posta ile zaten bir kayıt var. Şifrenizi bilmiyorsanız giriş ekranındaki “Şifremi unuttum” bağlantısını kullanın.';
       if (!hatalar.telefon && telefonKullanimda(temiz.telefon)) hatalar.telefon = TELEFON_KULLANIMDA;
       if (!veri.kvkkOnay) hatalar.kvkk = 'Devam etmek için açık rıza onayı gereklidir.';
+      const sifre = String(veri.sifre || '');
+      if (sifre.length < 6) hatalar.sifre = 'Şifre en az 6 karakter olmalıdır.';
+      else if (sifre.length > 64) hatalar.sifre = 'Şifre en fazla 64 karakter olabilir.';
+      else if (veri.sifre2 != null && String(veri.sifre2) !== sifre) hatalar.sifre2 = 'Şifreler birbirini tutmuyor.';
       if (Object.keys(hatalar).length) throw dogrulamaHatasi(hatalar);
+      // İki adım: önce e-postaya doğrulama kodu (demoda 123456), sonra kodla başvuru
+      if (!String(veri.kod || '').trim()) return { kodGonderildi: true, eposta: temiz.eposta };
+      if (String(veri.kod).replace(/\D/g, '') !== DEMO_KOD) throw hata('Kod hatalı. Demo için kod: ' + DEMO_KOD);
       const simdi = new Date().toISOString();
       if (eski) D.kayitlar.splice(D.kayitlar.indexOf(eski), 1);
       const k = Object.assign({ id: yeniId('m') }, temiz, {
         durum: 'beklemede', kvkkOnay: simdi, kayitTarihi: simdi, guncelleme: simdi, silmeTalebi: null
       });
       D.kayitlar.push(k);
+      D.sifreler[k.eposta] = sifre; // demo: gerçek sistemde yalnızca tuzlu özet saklanır
+      delete D.degistirmeli[k.eposta];
       kaydet();
       return { id: k.id, durum: k.durum };
     },
@@ -798,7 +841,7 @@
           .sort((a, b) => String(b.olusturma).localeCompare(String(a.olusturma)));
       }
       return D.duyurular
-        .filter(d => duyuruDurumu(d, simdi) === 'aktif' && (d.hedef === 'herkes' || d.hedef === o.rol))
+        .filter(d => duyuruDurumu(d, simdi) === 'aktif' && duyuruKime(d, bul(o.id)))
         .map(duyuruCikti)
         .sort((a, b) => String(b.baslangic).localeCompare(String(a.baslangic)));
     },
@@ -806,7 +849,8 @@
     async duyuruKaydet(v) {
       const o = yetkiGerekli('admin');
       await bekle(350);
-      const d = duyuruDogrula(v);      const simdi = new Date().toISOString();
+      const d = duyuruDogrula(v);
+      const simdi = new Date().toISOString();
       const mevcut = v.id ? D.duyurular.find(x => x.id === v.id) : null;
       if (v.id && !mevcut) throw hata('Duyuru bulunamadı.');
       const k = Object.assign(mevcut || { id: yeniId('d'), olusturan: o.eposta, olusturma: simdi }, d, {
@@ -816,7 +860,7 @@
       if (!mevcut) D.duyurular.push(k);
       if (k.eposta && !D.kuyruk[k.id] && !k.onay) {
         // Demo: gerçek sistemdeki günlük kotayı taklit eder (bugün 85 kişi, kalanı sonraki günlere).
-        const toplam = D.kayitlar.filter(x => x.durum === 'onayli' && (k.hedef === 'herkes' || k.hedef === x.tur)).length;
+        const toplam = D.kayitlar.filter(x => x.durum === 'onayli' && duyuruKime(k, x)).length;
         D.kuyruk[k.id] = { toplam, gonderilen: duyuruDurumu(k, new Date()) === 'aktif' ? Math.min(toplam, 85) : 0 };
       }
       kaydet();
@@ -847,7 +891,7 @@
     async duyuruTalebi(v) {
       const o = yetkiGerekli('uye');
       await bekle(350);
-      const d = duyuruDogrula(Object.assign({}, v, { hedef: 'herkes', eposta: false }), true);
+      const d = duyuruDogrula(Object.assign({}, v, { hedef: v.hedef === 'yil' ? 'yil' : 'herkes', eposta: false }), true);
       const benim = D.duyurular.filter(x => x.talepEden === o.id);
       if (benim.filter(x => x.onay === 'bekliyor').length >= 3) throw hata('Onay bekleyen 3 duyuru talebiniz var. Yöneticiler bunları yanıtlayınca yenisini gönderebilirsiniz.');
       const bugun = new Date().toISOString().slice(0, 10);
@@ -914,7 +958,7 @@
 
     async bekleyenler() {
       const o = yetkiGerekli('admin');
-      return D.kayitlar.filter(k => k.durum === 'beklemede').map(k => maskele(k, o));
+      return D.kayitlar.filter(k => k.durum === 'beklemede').map(k => Object.assign(maskele(k, o), { sifreVar: !!D.sifreler[k.eposta] }));
     },
 
     async silmeTalepleri() {

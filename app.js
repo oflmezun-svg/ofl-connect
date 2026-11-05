@@ -383,11 +383,12 @@
     </label>`;
   }
 
+  // Giriş yalnızca e-posta + şifreyle yapılır. Şifresi olmayanlar (eski hesaplar, okulun eklediği kişiler)
+  // "Şifremi unuttum / şifrem yok" ile e-postalarına gelen kodla şifre oluşturur.
   function girisEkrani(kip) {
     const hesap = Api.hesap();
     // Şifresi olan hatırlanan hesap: e-posta sabit, yalnızca şifre sorulur (banka uygulamaları gibi).
-    const sifreKipi = kip !== 'kod' && kip !== 'sifre' && hesap && hesap.sifreVar && hesap.eposta;
-    const sifreSekmesi = kip === 'sifre';
+    const sifreKipi = kip !== 'sifre' && hesap && hesap.sifreVar && hesap.eposta;
     const ilkAd = hesap && hesap.ad ? hesap.ad.split(' ')[0] : '';
 
     $app.innerHTML = `
@@ -414,20 +415,13 @@
               </form>
               <div class="giris-baglantilari">
                 <button class="dugme metin" type="button" data-giris-ac="unuttum">Şifremi unuttum</button>
-                <button class="dugme metin" type="button" data-giris-ac="kodla">E-posta koduyla giriş yap</button>
                 <button class="dugme metin" type="button" data-giris-ac="farkli">Farklı hesapla giriş yap</button>
               </div>` : `
               <h2>Giriş yap</h2>
-              <div class="segment giris-sekmeleri" role="radiogroup" aria-label="Giriş yöntemi">
-                <label><input type="radio" name="girisYolu" value="kod" ${sifreSekmesi ? '' : 'checked'}><span>${ikon('eposta', 'kucuk')} E-posta kodu</span></label>
-                <label><input type="radio" name="girisYolu" value="sifre" ${sifreSekmesi ? 'checked' : ''}><span>${ikon('anahtar', 'kucuk')} Şifre</span></label>
-              </div>
-              <p class="soluk" data-giris-yazi="kod" ${sifreSekmesi ? 'hidden' : ''}>E-posta adresinize tek kullanımlık bir giriş kodu göndereceğiz. Giriş yaptıktan sonra isterseniz bir şifre belirleyip sonraki girişlerde onu kullanabilirsiniz.</p>
-              <p class="soluk" data-giris-yazi="sifre" ${sifreSekmesi ? '' : 'hidden'}>Kendi belirlediğiniz şifreyle ya da okul yönetiminin size ilettiği geçici şifreyle giriş yapın.</p>
-
-              <form id="f-eposta-sifre" class="form" novalidate ${sifreSekmesi ? '' : 'hidden'}>
+              <p class="soluk">Kayıtlı e-posta adresiniz ve şifrenizle giriş yapın.</p>
+              <form id="f-eposta-sifre" class="form" novalidate>
                 <div class="alan"><label for="gs-eposta">E-posta adresi</label>
-                  <input id="gs-eposta" type="email" name="eposta" value="${esc(hesap && hesap.eposta || '')}" autocomplete="username" inputmode="email" placeholder="ornek@gmail.com" required>
+                  <input id="gs-eposta" type="email" name="eposta" value="${esc(hesap && hesap.eposta || '')}" autocomplete="username" inputmode="email" autocapitalize="off" placeholder="ornek@gmail.com" required>
                 </div>
                 <div class="alan"><label for="gs-sifre">Şifre</label>
                   <div class="sifre-girdisi">
@@ -437,28 +431,9 @@
                 </div>
                 ${hatirlaKutusu('gs')}
                 <button class="dugme buyuk genis" type="submit">Giriş yap</button>
-                <button class="dugme metin genis" type="button" data-giris-ac="unuttum-sifre">Şifremi unuttum</button>
+                <button class="dugme metin genis" type="button" data-giris-ac="unuttum-sifre">Şifremi unuttum / şifrem yok</button>
               </form>
-
-              <form id="f-eposta" class="form" novalidate ${sifreSekmesi ? 'hidden' : ''}>
-                <div class="alan"><label for="g-eposta">E-posta adresi</label>
-                  <input id="g-eposta" type="email" name="eposta" value="${esc(hesap && hesap.eposta || '')}" autocomplete="email" inputmode="email" placeholder="ornek@gmail.com" required>
-                </div>
-                <button class="dugme buyuk genis" type="submit">Giriş kodu gönder</button>
-                <button class="dugme metin genis" type="button" data-giris-ac="unuttum-eposta">Şifremi unuttum</button>
-              </form>
-
-              <form id="f-kod" class="form" novalidate hidden>
-                <div class="bilgi-kutu">${ikon('eposta')}<span><strong id="kod-eposta"></strong> adresine bir giriş kodu gönderdik.
-                  ${DEMO ? `<br>Demo için kod: <strong>${Api.DEMO_KOD}</strong>` : 'Adres sistemde kayıtlıysa kod birkaç dakika içinde gelir. Spam klasörünü de kontrol edin.'}</span></div>
-                <div class="alan"><label for="g-kod">6 haneli kod</label>
-                  <input id="g-kod" class="kod-girdisi" name="kod" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" required>
-                </div>
-                ${hatirlaKutusu('k')}
-                <button class="dugme buyuk genis" type="submit">Giriş yap</button>
-                <button class="dugme metin genis" type="button" data-giris-ac="geri">Farklı bir e-posta kullan</button>
-              </form>
-              ${hesap && hesap.sifreVar ? `<div class="giris-baglantilari"><button class="dugme metin" type="button" data-giris-ac="sifreye-don">Şifreyle giriş yap</button></div>` : ''}`}
+              <p class="giris-not soluk kucuk-yazi">${ikon('bilgi', 'kucuk')}<span>Onaylı hesabınız var ama hiç şifre belirlemediyseniz <strong>Şifremi unuttum / şifrem yok</strong> bağlantısıyla e-postanıza gelecek kodla şifrenizi oluşturun.</span></p>`}
 
             ${DEMO ? `
               <div class="ayrac"><span>Demo için hızlı giriş</span></div>
@@ -497,32 +472,11 @@
       });
       setTimeout(() => fS.sifre.focus(), 50);
       baglan('unuttum', () => sifreUnuttumEkrani(hesap.eposta));
-      baglan('kodla', async () => {
-        girisEkrani('kod');
-        const f = byId('f-eposta');
-        f.eposta.value = hesap.eposta;
-        f.requestSubmit();
-      });
       baglan('farkli', () => { Api.hesapUnut(); girisEkrani(); });
     }
 
     const fES = byId('f-eposta-sifre');
     if (fES) {
-      const sekme = yol => {
-        const sifre = yol === 'sifre';
-        fES.hidden = !sifre;
-        byId('f-eposta').hidden = sifre;
-        byId('f-kod').hidden = true;
-        $app.querySelectorAll('[data-giris-yazi]').forEach(p => { p.hidden = p.dataset.girisYazi !== yol; });
-        const hedef = sifre ? (fES.eposta.value ? fES.sifre : fES.eposta) : byId('f-eposta').eposta;
-        hedef.focus();
-      };
-      $app.querySelectorAll('[name="girisYolu"]').forEach(r => r.addEventListener('change', () => {
-        // Bir sekmede yazılan e-posta diğerine taşınır.
-        const e = (r.value === 'sifre' ? byId('f-eposta').eposta : fES.eposta).value;
-        (r.value === 'sifre' ? fES.eposta : byId('f-eposta').eposta).value = e;
-        sekme(r.value);
-      }));
       fES.addEventListener('submit', async ev => {
         ev.preventDefault();
         const eposta = fES.eposta.value.trim();
@@ -533,33 +487,7 @@
         catch (e) { hataGoster(e); fES.sifre.select(); } finally { b.disabled = false; }
       });
       baglan('unuttum-sifre', () => sifreUnuttumEkrani(fES.eposta.value.trim()));
-      if (sifreSekmesi) setTimeout(() => (fES.eposta.value ? fES.sifre : fES.eposta).focus(), 50);
-    }
-
-    const fE = byId('f-eposta');
-    const fK = byId('f-kod');
-    if (fE) {
-      let eposta = '';
-      fE.addEventListener('submit', async ev => {
-        ev.preventDefault();
-        eposta = fE.eposta.value.trim();
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(eposta)) { fE.eposta.setAttribute('aria-invalid', 'true'); return bildir('Geçerli bir e-posta adresi girin.', 'hata'); }
-        const b = fE.querySelector('button'); b.disabled = true;
-        try {
-          await Api.girisKoduGonder(eposta);
-          byId('kod-eposta').textContent = eposta;
-          fE.hidden = true; fK.hidden = false; fK.kod.focus();
-        } catch (e) { hataGoster(e); } finally { b.disabled = false; }
-      });
-      fK.addEventListener('submit', async ev => {
-        ev.preventDefault();
-        const b = fK.querySelector('button[type=submit]'); b.disabled = true;
-        try { girildi(await Api.girisYap(eposta, fK.kod.value, fK.hatirla.checked)); }
-        catch (e) { hataGoster(e); fK.kod.select(); } finally { b.disabled = false; }
-      });
-      baglan('geri', () => { fK.hidden = true; fE.hidden = false; fE.eposta.focus(); });
-      baglan('unuttum-eposta', () => sifreUnuttumEkrani(fE.eposta.value.trim()));
-      baglan('sifreye-don', () => girisEkrani());
+      if (kip === 'sifre') setTimeout(() => (fES.eposta.value ? fES.sifre : fES.eposta).focus(), 50);
     }
 
     $app.querySelectorAll('[data-giris]').forEach(b => b.addEventListener('click', async () => {
@@ -641,8 +569,9 @@
               <li data-adim="2"><span>2</span>Doğrulama</li>
               <li data-adim="3"><span>3</span>Yeni şifre</li>
             </ol>
-            <h2>Şifrenizi mi unuttunuz?</h2>
-            <p class="soluk" id="su-aciklama">Kayıtlı e-posta adresinizi yazın. Adresinize 6 haneli bir doğrulama kodu göndereceğiz; kodla yeni şifrenizi belirleyeceksiniz.</p>
+            <h2>Şifre belirleyin</h2>
+            <p class="soluk" id="su-aciklama">Şifrenizi unuttuysanız ya da hiç şifre belirlemediyseniz kayıtlı e-posta adresinizi yazın. Adresinize 6 haneli bir kod göndereceğiz; kodla yeni şifrenizi belirleyeceksiniz.</p>
+            <p class="giris-not soluk kucuk-yazi">${ikon('bilgi', 'kucuk')}<span>Kod yalnızca <strong>onaylanmış</strong> hesaplara gönderilir. Henüz kayıt olmadıysanız önce <a href="#/kayit">mezun kaydı oluşturun</a>.</span></p>
 
             <form id="su-eposta" class="form" novalidate>
               <div class="alan"><label for="su-e">E-posta adresi</label>
@@ -695,7 +624,7 @@
         byId('su-adres').textContent = adres;
         fY.kullanici.value = adres;
         fE.hidden = true; fY.hidden = false; adim(2);
-        byId('su-aciklama').textContent = 'Kodu ve yeni şifrenizi girin. Adres sistemde kayıtlıysa kod birkaç dakika içinde gelir.';
+        byId('su-aciklama').textContent = 'Kodu ve yeni şifrenizi girin. Adresin onaylanmış bir hesabı varsa kod birkaç dakika içinde gelir; gelmezse önce kayıt olmanız gerekebilir.';
         fY.kod.focus();
       } catch (e) { hataGoster(e); } finally { b.disabled = false; }
     };
@@ -798,7 +727,7 @@
     cekmeceAc({
       etiket: 'Giriş şifresi belirleyin', orta: true,
       bas: `<div><h2>Giriş şifresi belirleyin</h2><p class="soluk">Sonraki girişlerde e-posta kodu beklemeden, yalnızca şifrenizle girin.</p></div>`,
-      govde: `<div class="bilgi-kutu">${ikon('anahtar')}<span>E-posta adresiniz bu cihazda hatırlanır; giriş ekranında yalnızca şifreniz sorulur. Şifrenizi unutursanız her zaman e-posta koduyla girebilirsiniz.</span></div>
+      govde: `<div class="bilgi-kutu">${ikon('anahtar')}<span>E-posta adresiniz bu cihazda hatırlanır; giriş ekranında yalnızca şifreniz sorulur. Şifrenizi unutursanız giriş ekranındaki “Şifremi unuttum” bağlantısıyla e-postanıza gelen kodla yenisini belirleyebilirsiniz.</span></div>
         ${sifreFormu(true)}`,
       alt: `<button class="dugme ikincil" data-sifre-sonra>Şimdi değil</button>
         <button class="dugme" data-sifre-kaydet>${ikon('tamam')}<span>Şifreyi kaydet</span></button>`
@@ -821,7 +750,7 @@
         <div class="hesap-durum">
           <div class="bilgi-satiri"><span class="bilgi-ikon">${ikon('anahtar')}</span><div class="bilgi-govde">
             <span class="bilgi-etiket">Giriş şifresi</span>
-            <span class="bilgi-deger">${h.sifreVar ? 'Tanımlı — şifrenizle giriş yapabilirsiniz.' : 'Tanımlı değil — her girişte e-posta kodu gerekir.'}</span></div>
+            <span class="bilgi-deger">${h.sifreVar ? 'Tanımlı — şifrenizle giriş yapabilirsiniz.' : 'Tanımlı değil — aşağıdan bir şifre belirleyin.'}</span></div>
             ${h.sifreVar ? `<span class="durum-cip yesil">${ikon('tamam', 'kucuk')}Etkin</span>` : `<span class="durum-cip gri">Yok</span>`}</div>
           <div class="bilgi-satiri"><span class="bilgi-ikon">${ikon('yukle')}</span><div class="bilgi-govde">
             <span class="bilgi-etiket">Bu cihaz</span>
@@ -829,7 +758,7 @@
         </div>
         <h3 class="bolum-baslik">${h.sifreVar ? 'Şifreyi değiştir' : 'Şifre belirle'}</h3>
         ${sifreFormu(!h.sifreVar)}
-        <p class="not">${ikon('bilgi', 'kucuk')} Şifrenizi unutursanız giriş ekranındaki “e-posta koduyla gir” bağlantısını kullanın; ardından buradan yeni şifre belirleyebilirsiniz.</p>`,
+        <p class="not">${ikon('bilgi', 'kucuk')} Şifrenizi unutursanız giriş ekranındaki “Şifremi unuttum” bağlantısıyla e-postanıza gelen kodla yeni şifre belirleyebilirsiniz.</p>`,
       alt: `<button class="dugme" data-sifre-kaydet>${ikon('tamam')}<span>${h.sifreVar ? 'Şifreyi değiştir' : 'Şifreyi kaydet'}</span></button>`
     });
     sifreFormunuBagla(h.eposta, () => { bildir(h.sifreVar ? 'Şifreniz değiştirildi.' : 'Şifreniz kaydedildi.', 'basarili'); cekmeceKapat(); });
@@ -886,7 +815,7 @@
   // mod: kayit (herkese açık başvuru), profil (kendi bilgileri), admin (yönetici düzenlemesi), yeni (yönetici ekleme)
   function profilFormu(k, mod) {
     const on = 'f' + mod;
-    k = k || { gorunurluk: { egitim: true, meslek: true, sehir: true, telefon: false, eposta: true } };
+    k = k || { gorunurluk: { egitim: true, meslek: true, sehir: true, telefon: true, eposta: true } };
     const g = k.gorunurluk || {};
     const tur = k.tur === 'ogretmen' ? 'ogretmen' : 'mezun';
     // Mezun kendi başvurusunda ve profilinde tüm alanları doldurmak zorunda; yönetici yalnızca temel alanları.
@@ -921,6 +850,25 @@
           <span><strong>Yönetici yetkisi ver</strong><small>Bu öğretmen yönetim paneline erişir; başvuruları onaylayabilir, kullanıcı ekleyebilir ve duyuru yapabilir. Rehberde yine öğretmen olarak görünür.</small></span>
         </label>
         <p class="bolum-not">${ikon('eposta', 'kucuk')} Kaydettiğinizde kişiye sisteme eklendiğini ve nasıl giriş yapacağını anlatan bir e-posta gönderilir.</p>
+      </fieldset>` : '';
+
+    // Kayıtta şifre belirlenir; onaydan sonra giriş bu şifreyle yapılır.
+    const sifreBolumu = mod === 'kayit' ? `
+      <fieldset class="form-bolum">
+        <legend>Giriş şifresi</legend>
+        <div class="alan-izgara">
+          <div class="alan" data-zorunlu><div class="alan-bas"><label for="${on}-sifre">Şifre <span class="zorunlu" aria-hidden="true">*</span></label></div>
+            <div class="sifre-girdisi">
+              <input id="${on}-sifre" type="password" name="sifre" autocomplete="new-password" minlength="6" maxlength="64">
+              <button type="button" class="ikon-dugme kucuk" data-goster="${on}-sifre" aria-label="Şifreyi göster">${ikon('goz')}</button>
+            </div>
+            <small class="alan-ipucu">En az 6 karakter; harf ve rakam karıştırmanız önerilir.</small>
+            <em class="alan-hata" data-hata="sifre"></em></div>
+          <div class="alan" data-zorunlu><div class="alan-bas"><label for="${on}-sifre2">Şifre (tekrar) <span class="zorunlu" aria-hidden="true">*</span></label></div>
+            <input id="${on}-sifre2" type="password" name="sifre2" autocomplete="new-password" maxlength="64">
+            <em class="alan-hata" data-hata="sifre2"></em></div>
+        </div>
+        <p class="bolum-not">${ikon('eposta', 'kucuk')} Başvurunuzu göndermeden önce e-posta adresinize 6 haneli bir doğrulama kodu göndereceğiz. Onaylandıktan sonra e-posta adresiniz ve bu şifreyle giriş yapacaksınız.</p>
       </fieldset>` : '';
 
     const kvkk = mod === 'kayit' ? `
@@ -965,7 +913,7 @@
           <div class="alan-izgara">
             ${girdi(on, 'ad', 'Ad', k.ad, { zorunlu: true, ozellik: 'autocomplete="given-name" autocapitalize="words"' })}
             ${girdi(on, 'soyad', 'Soyad', k.soyad, { zorunlu: true, ozellik: 'autocomplete="family-name" autocapitalize="words"' })}
-            ${girdi(on, 'yil', 'Mezuniyet yılı', '', { zorunlu: true, secim: yilSecenekleri(k.yil, turSecilir || +k.yil > OFL.BU_YIL), sinif: 'sadece-mezun' })}
+            ${girdi(on, 'yil', 'Mezuniyet yılı', '', { zorunlu: true, secim: yilSecenekleri(k.yil, true), sinif: 'sadece-mezun' })}
             ${girdi(on, 'brans', 'Branş', tur === 'ogretmen' ? k.brans : '', { zorunlu: true, sinif: 'sadece-ogretmen', ozellik: 'list="brans-listesi" placeholder="Örn. Kimya"' })}
           </div>
         </fieldset>
@@ -992,6 +940,7 @@
             ${girdi(on, 'eposta', 'E-posta', k.eposta, { zorunlu: true, anahtar: anahtar('eposta', g.eposta), ozellik: 'type="email" placeholder="ornek@gmail.com" autocomplete="email" inputmode="email" autocapitalize="off"', ipucu: 'Sisteme giriş bu adresle yapılır.' })}
           </div>
         </fieldset>
+        ${sifreBolumu}
         ${kvkk}
         ${yetki}
         ${kati ? `<p class="bolum-not">${ikon('bilgi', 'kucuk')} <span><span class="zorunlu">*</span> ile işaretli alanların doldurulması zorunludur.</span></p>` : ''}
@@ -1026,6 +975,7 @@
     v.gorunurluk = {};
     for (const a of OFL.ALANLAR) v.gorunurluk[a] = f.elements['g_' + a].checked;
     if (f.elements.kvkkOnay) v.kvkkOnay = f.elements.kvkkOnay.checked;
+    if (f.elements.sifre) { v.sifre = f.elements.sifre.value; v.sifre2 = f.elements.sifre2.value; }
     if (f.elements.yonetici) v.yonetici = v.tur === 'ogretmen' && f.elements.yonetici.checked;
     return v;
   }
@@ -1043,6 +993,11 @@
       if (gorunur(a) && !f.elements[ad].value) h[ad] = 'Lütfen bir seçenek işaretleyin.';
     });
     if (f.elements.kvkkOnay && !f.elements.kvkkOnay.checked) h.kvkk = 'Devam etmek için açık rıza onayı gereklidir.';
+    if (f.elements.sifre && !h.sifre) {
+      const s1 = f.elements.sifre.value;
+      if (s1.length < 6) h.sifre = 'Şifre en az 6 karakter olmalıdır.';
+      else if (s1 !== f.elements.sifre2.value) h.sifre2 = 'Şifreler birbirini tutmuyor.';
+    }
     if (Object.keys(h).length) {
       const e = new Error('Lütfen zorunlu alanları doldurun.');
       e.kullaniciMesaji = true;
@@ -1096,30 +1051,100 @@
           <div class="kayit-kutu">
             <a href="#/" class="geri-baglanti">${ikon('sol', 'kucuk')} Girişe dön</a>
             <h2>Mezun kaydı</h2>
-            <p class="soluk">Başvurunuz okul yönetimi tarafından incelenip onaylandıktan sonra e-posta adresinizle giriş yapabilirsiniz.</p>
+            <p class="soluk" id="kayit-aciklama">Bilgilerinizi doldurun ve bir giriş şifresi belirleyin. E-posta adresinizi doğruladıktan sonra başvurunuz okul yönetimine gider; onaylanınca e-posta adresiniz ve şifrenizle giriş yaparsınız.</p>
             ${profilFormu(null, 'kayit')}
+            <form id="kayit-kod" class="form" novalidate hidden>
+              <div class="bilgi-kutu">${ikon('eposta')}<span><strong id="kayit-adres"></strong> adresine 6 haneli bir doğrulama kodu gönderdik. ${DEMO ? '' : 'Kod 10 dakika geçerlidir. Birkaç dakika içinde gelmezse spam klasörünü kontrol edin.'}
+                ${DEMO ? `<br>Demo için kod: <strong>${Api.DEMO_KOD}</strong>` : ''}</span></div>
+              <div class="alan"><label for="kk-kod">Doğrulama kodu</label>
+                <input id="kk-kod" class="kod-girdisi" name="kod" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" required>
+                <em class="alan-hata" data-hata="kod"></em>
+              </div>
+              <button class="dugme buyuk genis" type="submit">Doğrula ve başvurumu gönder</button>
+              <button class="dugme metin genis" type="button" data-kayit-ac="tekrar">Kod gelmedi — yeniden gönder</button>
+              <button class="dugme metin genis" type="button" data-kayit-ac="duzelt">Bilgilerimi düzelt</button>
+            </form>
           </div>
         </main>
       </div>`;
-    formuBagla($app.querySelector('form'), async v => {
-      await Api.kayitOl(v);
-      $app.querySelector('.kayit-kutu').innerHTML = `
-        <div class="basari">
-          <span class="basari-ikon">${ikon('tamam')}</span>
-          <h2>Başvurunuz alındı</h2>
-          <p>Bilgileriniz okul yönetiminin onayına gönderildi. Onaylandığında <strong>${esc(v.eposta)}</strong> adresinize bilgi verilecek ve bu adresle giriş yapabileceksiniz.</p>
-          ${DEMO ? '<p class="soluk">Demo ipucu: Yönetici olarak girip “Başvurular” sayfasından bu başvuruyu inceleyip onaylayabilirsiniz.</p>' : ''}
-          ${cihaz().mobil && !KURULU() ? `<div class="kurulum-oneri">
-            <strong>${ikon('yukle', 'kucuk')} Beklerken uygulamayı telefonunuza ekleyin</strong>
-            <p class="soluk kucuk-yazi">Onaylandığınızda OFL Connect'i ana ekranınızdaki simgeden tek dokunuşla açabilirsiniz. Kısa video rehberi izleyin:</p>
-            <button class="dugme" data-ac="kurulum-rehberi">${ikon('oynat')}<span>Video rehberi izle</span></button>
-          </div>` : ''}
-          <a class="dugme ${cihaz().mobil && !KURULU() ? 'ikincil' : ''}" href="#/">Girişe dön</a>
-        </div>`;
+    const fP = $app.querySelector('.profil-formu');
+    const fK = byId('kayit-kod');
+    let bekleyen = null;
+    $app.querySelectorAll('[data-goster]').forEach(b => b.addEventListener('click', () => {
+      const g = byId(b.dataset.goster);
+      const gizli = g.type === 'password';
+      g.type = gizli ? 'text' : 'password';
+      b.innerHTML = ikon(gizli ? 'gozKapali' : 'goz');
+      b.setAttribute('aria-label', gizli ? 'Şifreyi gizle' : 'Şifreyi göster');
+    }));
+    const adimGoster = kod => {
+      fP.hidden = kod; fK.hidden = !kod;
+      byId('kayit-aciklama').textContent = kod
+        ? 'Son adım: e-posta adresinizin size ait olduğunu doğrulayın.'
+        : 'Bilgilerinizi doldurun ve bir giriş şifresi belirleyin. E-posta adresinizi doğruladıktan sonra başvurunuz okul yönetimine gider; onaylanınca e-posta adresiniz ve şifrenizle giriş yaparsınız.';
       window.scrollTo(0, 0);
-      // Telefondan kayıt olanlara kurulum rehberi kendiliğinden açılır
-      if (cihaz().mobil && !KURULU()) setTimeout(() => kurulumRehberi(true), 900);
+      if (kod) setTimeout(() => fK.kod.focus(), 50);
+    };
+    // 1. adım: bilgiler denetlenir, e-postaya kod gider
+    formuBagla(fP, async v => {
+      const r = await Api.kayitOl(v);
+      if (r && r.kodGonderildi) {
+        bekleyen = v;
+        byId('kayit-adres').textContent = v.eposta.trim();
+        fK.kod.value = '';
+        adimGoster(true);
+      } else basvuruAlindi(v);
     });
+    $app.querySelector('[data-kayit-ac="duzelt"]').addEventListener('click', () => adimGoster(false));
+    $app.querySelector('[data-kayit-ac="tekrar"]').addEventListener('click', async ev => {
+      const b = ev.currentTarget; b.disabled = true;
+      try { await Api.kayitOl(bekleyen); bildir('Yeni kod gönderildi.', 'basarili'); fK.kod.focus(); }
+      catch (e) { hataGoster(e); } finally { b.disabled = false; }
+    });
+    // 2. adım: kodla başvuru tamamlanır
+    fK.addEventListener('submit', async ev => {
+      ev.preventDefault();
+      const hataYeri = fK.querySelector('[data-hata="kod"]');
+      hataYeri.textContent = '';
+      const kod = fK.kod.value.replace(/\D/g, '');
+      if (kod.length !== 6) { hataYeri.textContent = 'E-postanıza gelen 6 haneli kodu girin.'; fK.kod.setAttribute('aria-invalid', 'true'); return fK.kod.focus(); }
+      const b = fK.querySelector('button[type=submit]'); b.disabled = true;
+      try {
+        await Api.kayitOl(Object.assign({}, bekleyen, { kod }));
+        basvuruAlindi(bekleyen);
+      } catch (e) {
+        if (e.alanlar) {
+          // Bu arada bilgilerde sorun çıktıysa (ör. e-posta başkası tarafından alındı) forma dönülür.
+          adimGoster(false);
+          for (const [alan, mesaj] of Object.entries(e.alanlar)) {
+            const el = fP.querySelector(`[data-hata="${alan === 'brans' ? 'uzmanlik' : alan}"]`);
+            if (el) el.textContent = mesaj;
+          }
+          return hataGoster(e);
+        }
+        hataYeri.textContent = e.message || '';
+        hataGoster(e); fK.kod.select();
+      } finally { if (document.contains(b)) b.disabled = false; }
+    });
+  }
+
+  function basvuruAlindi(v) {
+    $app.querySelector('.kayit-kutu').innerHTML = `
+      <div class="basari">
+        <span class="basari-ikon">${ikon('tamam')}</span>
+        <h2>Başvurunuz alındı</h2>
+        <p>E-posta adresiniz doğrulandı ve bilgileriniz okul yönetiminin onayına gönderildi. Onaylandığında <strong>${esc(v.eposta)}</strong> adresinize bilgi verilecek; bu adres ve belirlediğiniz şifreyle giriş yapabileceksiniz.</p>
+        ${DEMO ? '<p class="soluk">Demo ipucu: Yönetici olarak girip “Başvurular” sayfasından bu başvuruyu inceleyip onaylayabilirsiniz.</p>' : ''}
+        ${cihaz().mobil && !KURULU() ? `<div class="kurulum-oneri">
+          <strong>${ikon('yukle', 'kucuk')} Beklerken uygulamayı telefonunuza ekleyin</strong>
+          <p class="soluk kucuk-yazi">Onaylandığınızda OFL Connect'i ana ekranınızdaki simgeden tek dokunuşla açabilirsiniz. Kısa video rehberi izleyin:</p>
+          <button class="dugme" data-ac="kurulum-rehberi">${ikon('oynat')}<span>Video rehberi izle</span></button>
+        </div>` : ''}
+        <a class="dugme ${cihaz().mobil && !KURULU() ? 'ikincil' : ''}" href="#/">Girişe dön</a>
+      </div>`;
+    window.scrollTo(0, 0);
+    // Telefondan kayıt olanlara kurulum rehberi kendiliğinden açılır
+    if (cihaz().mobil && !KURULU()) setTimeout(() => kurulumRehberi(true), 900);
   }
 
   /* =====================================================================
@@ -1428,6 +1453,9 @@
       <small>${esc(x.kisi.tur === 'ogretmen' ? (x.kisi.brans ? x.kisi.brans + ' öğretmeni' : 'Öğretmen') : x.kisi.yil + ' mezunu')}</small></span></button>`;
     const bekleyen = t.gelen.filter(x => x.durum === 'bekliyor');
     const izinli = t.gelen.filter(x => x.durum === 'kabul');
+    const yanitlanan = t.gelen.filter(x => x.durum === 'red' || x.durum === 'geri');
+    const silDugmesi = x => `<button class="dugme metin kucuk talep-sil" data-ac="talep-sil" data-id="${esc(x.id)}" aria-label="Kaydı sil">${ikon('cop', 'kucuk')}<span>Sil</span></button>`;
+    const durumCipi = x => { const [renk, ik, yazi] = TALEP_DURUMU[x.durum] || TALEP_DURUMU.bekliyor; return `<span class="durum-cip ${renk}">${ikon(ik, 'kucuk')}${yazi}${x.yeni ? ' · yeni' : ''}</span>`; };
     ic.innerHTML = sayfaBasi('İletişim talepleri', alt) + `
       <section class="kart talep-bolum">
         <h3>Size gelen talepler ${bekleyen.length ? `<span class="sayac">${bekleyen.length}</span>` : ''}</h3>
@@ -1445,15 +1473,20 @@
       ${izinli.length ? `<section class="kart talep-bolum">
         <h3>Telefonunuzu görebilenler</h3>
         <ul class="talep-listesi">${izinli.map(x => `<li>${kisi(x)}
-          <div class="talep-eylem"><div class="talep-dugmeler"><button class="dugme tehlike-cerceve kucuk" data-ac="talep-geri" data-id="${esc(x.id)}">${ikon('kilit', 'kucuk')}<span>İzni geri al</span></button></div>
-          <small class="soluk">İzni geri alırsanız numaranız bu kişiye yeniden gizlenir.</small></div></li>`).join('')}</ul>
+          <div class="talep-eylem"><div class="talep-dugmeler"><button class="dugme tehlike-cerceve kucuk" data-ac="talep-geri" data-id="${esc(x.id)}">${ikon('kilit', 'kucuk')}<span>İzni geri al</span></button>${silDugmesi(x)}</div>
+          <small class="soluk">İzni geri alırsanız numaranız bu kişiye yeniden gizlenir. Kaydı silerseniz izin de kalkar.</small></div></li>`).join('')}</ul>
+      </section>` : ''}
+      ${yanitlanan.length ? `<section class="kart talep-bolum">
+        <h3>Yanıtladığınız talepler</h3>
+        <ul class="talep-listesi">${yanitlanan.map(x => `<li>${kisi(x)}
+          <div class="talep-eylem"><div class="talep-dugmeler">${durumCipi(x)}${silDugmesi(x)}</div>
+          <small class="soluk">${x.yanit ? tarihYaz(x.yanit) + ' · ' : ''}Numaranız bu kişiye gizli. Kaydı silerek listenizden kaldırabilirsiniz.</small></div></li>`).join('')}</ul>
       </section>` : ''}
       <section class="kart talep-bolum">
         <h3>Gönderdiğiniz talepler</h3>
         ${t.giden.length ? `<ul class="talep-listesi">${t.giden.map(x => {
-          const [renk, ik, yazi] = TALEP_DURUMU[x.durum] || TALEP_DURUMU.bekliyor;
           return `<li>${kisi(x)}<div class="talep-eylem">
-            <span class="durum-cip ${renk}">${ikon(ik, 'kucuk')}${yazi}${x.yeni ? ' · yeni' : ''}</span>
+            <div class="talep-dugmeler">${durumCipi(x)}${x.durum !== 'bekliyor' ? silDugmesi(x) : ''}</div>
             <small class="soluk">${x.durum === 'kabul' ? 'Telefon numarası artık size görünüyor; kişiye dokunarak arayabilirsiniz.'
               : x.durum === 'red' ? (x.tekrar ? `${tarihYaz(x.tekrar)} tarihinden sonra yeniden talep gönderebilirsiniz.` : '')
               : x.durum === 'geri' ? 'Kişi numarasını görme iznini geri aldı.' : `${tarihYaz(x.olusturma)} tarihinde gönderildi.`}</small></div></li>`;
@@ -1481,6 +1514,26 @@
     try {
       await Api.iletisimYanit(id, eylem === 'kabul');
       bildir({ kabul: `Kabul edildi. ${x.kisi.ad} numaranızı görebilir ve kendisine bildirim gitti.`, red: `Talep reddedildi; ${x.kisi.ad} kişisine bildirildi.`, geri: 'İzin geri alındı.' }[eylem], 'basarili');
+      taleplerEkrani();
+    } catch (e) { hataGoster(e); }
+  }
+
+  // Yanıtlanmış talep kaydını listeden siler (onay sorulur). Kabul edilmiş gelen talepte izin de kalkar.
+  async function talepSil(id) {
+    const t = S.talepler || { gelen: [], giden: [] };
+    const gelen = t.gelen.find(x => x.id === id);
+    const x = gelen || t.giden.find(x => x.id === id);
+    if (!x) return;
+    const ad = x.kisi.ad + ' ' + x.kisi.soyad;
+    const maddeler = gelen
+      ? (x.durum === 'kabul'
+        ? ['Kayıt listenizden kaldırılır.', `${ad} artık telefon numaranızı göremez (izin geri alınır).`, 'Kişi isterse yeniden talep gönderebilir; kabul edip etmemek yine size kalır.']
+        : ['Kayıt listenizden kaldırılır.', 'Numaranız bu kişiye gizli kalmaya devam eder.', 'Kişi yeniden talep gönderirse yine burada görürsünüz.'])
+      : ['Kayıt yalnızca sizin listenizden kaldırılır.', x.durum === 'kabul' ? 'Kişinin size verdiği izin değişmez; numarası rehberde görünmeye devam eder.' : 'Gerekirse kişiye yeniden talep gönderebilirsiniz.'];
+    if (!await onayIste(`${ad} ile ilgili talep kaydı silinecek.`, 'Evet, sil', true, { baslik: 'Emin misiniz?', ikon: 'cop', maddeler })) return;
+    try {
+      const r = await Api.iletisimSil(id);
+      bildir(r && r.izinKalkti ? `Kayıt silindi; ${x.kisi.ad} artık numaranızı göremez.` : 'Kayıt silindi.', 'basarili');
       taleplerEkrani();
     } catch (e) { hataGoster(e); }
   }
@@ -1578,11 +1631,11 @@
     if (!yer) return;
     yer.innerHTML = `<h3>Giriş şifresi</h3>
       <div class="bilgi-satiri"><span class="bilgi-ikon">${ikon('anahtar')}</span><div class="bilgi-govde">
-        <span class="bilgi-deger">${m.sifreVar ? 'Şifre tanımlı' : 'Şifre yok — e-posta koduyla giriş yapıyor'}</span></div></div>
+        <span class="bilgi-deger">${m.sifreVar ? 'Şifre tanımlı' : 'Şifre yok — “Şifremi unuttum / şifrem yok” ile oluşturabilir'}</span></div></div>
       <p class="soluk kucuk-yazi">Giriş yapamıyorsa yeni bir geçici şifre atayıp WhatsApp ile gönderebilirsiniz; varsa eski şifresi geçersiz olur ve ilk girişte kendi şifresini belirler. Kişi “Şifremi unuttum” bağlantısıyla kendisi de yenileyebilir.</p>
       <div class="sifre-eylemleri">
         <button class="dugme kucuk" data-ac="sifre-ver" data-id="${k.id}">${ikon('anahtar')}<span>Yeni şifre ata ve WhatsApp ile gönder</span></button>
-        ${m.sifreVar ? `<button class="dugme ikincil kucuk" data-ac="sifre-sifirla" data-id="${k.id}">${ikon('yenile')}<span>Şifreyi kaldır (e-posta koduyla girsin)</span></button>` : ''}
+        ${m.sifreVar ? `<button class="dugme ikincil kucuk" data-ac="sifre-sifirla" data-id="${k.id}">${ikon('yenile')}<span>Şifreyi kaldır (kodla yenisini belirlesin)</span></button>` : ''}
       </div>`;
   }
 
@@ -1596,7 +1649,7 @@
     const k = await kayitGetir(id).catch(() => null);
     const ad = k ? adSoyad(k) : 'Kişi';
     if (islem === 'sifirla') {
-      if (!await onayIste(`${ad} kişisinin şifresi kaldırılacak. Bir sonraki girişini e-posta koduyla yapıp yeni şifre belirleyebilecek. Kişiye bilgi e-postası gider.`, 'Şifreyi kaldır', true)) return;
+      if (!await onayIste(`${ad} kişisinin şifresi kaldırılacak. Giriş ekranındaki “Şifremi unuttum / şifrem yok” bağlantısıyla e-postasına gelen kodla yeni şifre belirleyecek. Kişiye bilgi e-postası gider.`, 'Şifreyi kaldır', true)) return;
       try { await Api.kullaniciSifre(id, 'sifirla'); bildir('Şifre kaldırıldı.', 'basarili'); if (k) sifreBolumunuDoldur(k); }
       catch (e) { hataGoster(e); }
       return;
@@ -1981,10 +2034,11 @@
         </section>
         <section class="inceleme-bolum giris-yontemi">
           <h3>Onaylanınca giriş</h3>
-          <label class="onay-kutusu"><input type="radio" name="onayGiris" value="sifre" ${whatsappNumarasi(k.telefon) ? 'checked' : ''}>
-            <span><strong>Geçici şifre oluştur, WhatsApp ile gönder</strong><small>E-posta kotası harcamaz. Kişi ilk girişte kendi şifresini belirler; şifre 7 gün geçerlidir.</small></span></label>
-          <label class="onay-kutusu"><input type="radio" name="onayGiris" value="eposta" ${whatsappNumarasi(k.telefon) ? '' : 'checked'}>
-            <span><strong>Yalnızca onay e-postası gönder</strong><small>Kişi e-postasına gelen kodla giriş yapar.</small></span></label>
+          ${k.sifreVar ? `<p class="bilgi-kutu">${ikon('anahtar')}<span>Başvuru sahibi kayıt olurken e-postasını doğruladı ve <strong>kendi şifresini belirledi</strong>. Onaylanınca e-postayla bilgilendirilir ve şifresiyle giriş yapar.</span></p>` : ''}
+          <label class="onay-kutusu"><input type="radio" name="onayGiris" value="sifre" ${!k.sifreVar && whatsappNumarasi(k.telefon) ? 'checked' : ''}>
+            <span><strong>Geçici şifre oluştur, WhatsApp ile gönder</strong><small>${k.sifreVar ? 'Gerekmez; yalnızca kişi şifresini hatırlamıyorsa kullanın.' : 'E-posta kotası harcamaz.'} Kişi ilk girişte kendi şifresini belirler; şifre 7 gün geçerlidir.</small></span></label>
+          <label class="onay-kutusu"><input type="radio" name="onayGiris" value="eposta" ${k.sifreVar || !whatsappNumarasi(k.telefon) ? 'checked' : ''}>
+            <span><strong>Yalnızca onay e-postası gönder</strong><small>${k.sifreVar ? 'Kişi kayıtta belirlediği şifreyle giriş yapar.' : 'Kişi “Şifremi unuttum / şifrem yok” ile e-postasına gelen kodla şifresini oluşturur.'}</small></span></label>
         </section>
         <section class="inceleme-bolum">
           <h3>Başvuru ve onay</h3>
@@ -2098,7 +2152,21 @@
     etkinlik: { ad: 'Etkinlik', ikon: 'takvim', sinif: 'yesil' },
     onemli: { ad: 'Önemli', ikon: 'duyuru', sinif: 'kirmizi' }
   };
-  const HEDEF_ADI = { herkes: 'Herkes', mezun: 'Yalnızca mezunlar', ogretmen: 'Yalnızca öğretmenler' };
+  const HEDEF_ADI = { herkes: 'Herkes', mezun: 'Yalnızca mezunlar', ogretmen: 'Yalnızca öğretmenler', yil: 'Belirli mezuniyet yılları' };
+  // [2015, 2016, 2017, 2020] → "2015–2017, 2020"
+  function yilListesiYazisi(yillar) {
+    const y = [...new Set((yillar || []).map(Number))].sort((a, b) => a - b);
+    const parca = [];
+    for (let i = 0; i < y.length;) {
+      let j = i;
+      while (j + 1 < y.length && y[j + 1] === y[j] + 1) j++;
+      if (j - i >= 2) parca.push(y[i] + '–' + y[j]);
+      else for (let k = i; k <= j; k++) parca.push(String(y[k]));
+      i = j + 1;
+    }
+    return parca.join(', ');
+  }
+  const hedefYazisi = d => d.hedef === 'yil' ? (d.yillar && d.yillar.length ? yilListesiYazisi(d.yillar) + ' mezunları' : 'Seçilen yılların mezunları') : HEDEF_ADI[d.hedef] || 'Herkes';
   const DURUM_ADI = {
     aktif: ['Yayında', 'yesil'], planli: ['Planlandı', 'turuncu'], bitti: ['Süresi doldu', 'gri'],
     onay: ['Onay bekliyor', 'turuncu'], red: ['Onaylanmadı', 'kirmizi']
@@ -2169,7 +2237,7 @@
       ek.yeni ? '<span class="etiket">Yeni</span>' : '',
       (ek.admin || ek.talep) && durum ? `<span class="durum-cip ${durum[1]}">${durum[0]}</span>` : '',
       ek.talep && d.yeni ? '<span class="etiket">Yeni yanıt</span>' : '',
-      ek.admin ? `<span class="durum-cip gri">${ikon('kisiler', 'kucuk')}${HEDEF_ADI[d.hedef] || 'Herkes'}</span>` : ''
+      ek.admin || d.hedef === 'yil' ? `<span class="durum-cip ${d.hedef === 'yil' ? 'mavi' : 'gri'}">${ikon(d.hedef === 'yil' ? 'kep' : 'kisiler', 'kucuk')}${esc(hedefYazisi(d))}</span>` : ''
     ].join('');
     const eposta = ek.admin ? epostaDurumuYazisi(d) : '';
     const talepte = d.durum === 'onay' || d.durum === 'red';
@@ -2263,7 +2331,7 @@
     </section>`;
   }
 
-  // talep: üyenin öneri formu (hedef kitle ve e-posta seçenekleri yok); kaynak: reddedilen öneriden yeniden başlat
+  // talep: üyenin öneri formu (hedef: herkes ya da seçilen yıllar; e-posta yok); kaynak: reddedilen öneriden yeniden başlat
   async function duyuruEditoru(id, talep, kaynak) {
     let d = null;
     if (id) {
@@ -2276,7 +2344,11 @@
     const bas = d ? new Date(d.baslangic) : simdi;
     const bit = d ? new Date(d.bitis) : new Date(simdi.getTime() + 7 * 864e5);
     const tur = o ? o.tur : 'bilgi';
-    const hedef = d ? d.hedef : 'herkes';
+    const hedef = o && (!talep || o.hedef === 'yil') ? o.hedef || 'herkes' : 'herkes';
+    const seciliYillar = new Set((o && o.hedef === 'yil' ? o.yillar || [] : []).map(Number));
+    const hedefler = talep ? { herkes: 'Tüm mezun ve öğretmenler', yil: HEDEF_ADI.yil } : HEDEF_ADI;
+    const yilSecenek = [];
+    for (let y = OFL.BU_YIL + 5; y >= OFL.ILK_YIL; y--) yilSecenek.push(y);
     const epostaGitti = d && d.eposta;
     const radyo = (ad, deger, secili, yazi) => `<label><input type="radio" name="${ad}" value="${deger}" ${secili === deger ? 'checked' : ''}><span>${yazi}</span></label>`;
     const hata = ad => `<em class="alan-hata" data-hata="${ad}"></em>`;
@@ -2284,7 +2356,7 @@
     cekmeceAc({
       etiket: talep ? 'Duyuru öner' : d ? 'Duyuruyu düzenle' : 'Yeni duyuru', genis: true,
       bas: `<div><h2>${talep ? 'Duyuru öner' : d ? 'Duyuruyu düzenle' : 'Yeni duyuru'}</h2><p class="soluk">${talep
-        ? 'Duyurunuz önce okul yönetiminin onayına gider. Onaylanınca yayın aralığında tüm mezun ve öğretmenlere gösterilir; süresi dolunca otomatik kaldırılır.'
+        ? 'Duyurunuz önce okul yönetiminin onayına gider. Onaylanınca yayın aralığında seçtiğiniz kitleye (herkese ya da belirli mezuniyet yıllarına) gösterilir; süresi dolunca otomatik kaldırılır.'
         : d && d.durum === 'onay' && d.paylasan ? `Bu duyuruyu ${esc(adSoyad(d.paylasan))} önerdi. Gerekirse düzeltip kaydedin, ardından “Onayla” ile yayına alın.`
         : 'Duyuru, yayın aralığında mezunlara ve öğretmenlere gösterilir; süresi dolunca otomatik kaldırılır.'}</p></div>`,
       govde: `<div class="duyuru-duzen">
@@ -2307,10 +2379,17 @@
             </div>
           </fieldset>
           <fieldset class="form-bolum">
-            <legend>${talep ? 'Ne zaman' : 'Kime ve ne zaman'}</legend>
-            ${talep ? '' : `<div class="alan"><label>Hedef kitle</label>
-              <div class="segment">${Object.entries(HEDEF_ADI).map(([k, a]) => radyo('hedef', k, hedef, a)).join('')}</div>
-            </div>`}
+            <legend>Kime ve ne zaman</legend>
+            <div class="alan"><label>Hedef kitle</label>
+              <div class="segment hedef-segment">${Object.entries(hedefler).map(([k, a]) => radyo('hedef', k, hedef, a)).join('')}</div>
+            </div>
+            <div class="alan yil-secimi" data-yil-secimi ${hedef === 'yil' ? '' : 'hidden'}>
+              <div class="alan-bas"><label>Mezuniyet yılları <span class="zorunlu" aria-hidden="true">*</span></label>
+                <span class="soluk kucuk-yazi" data-yil-ozet></span></div>
+              <div class="yil-secici" role="group" aria-label="Mezuniyet yılları">${yilSecenek.map(y => `<label class="yil-cipi"><input type="checkbox" name="yillar" value="${y}" ${seciliYillar.has(y) ? 'checked' : ''}><span>${y}</span></label>`).join('')}</div>
+              <small class="alan-ipucu">Duyuru yalnızca seçtiğiniz yıllarda mezun olanlara (ve yöneticilere) görünür${talep ? '' : '; bildirim ve e-posta da yalnızca onlara gider'}. Öğretmenler bu duyuruyu görmez.</small>
+              ${hata('yillar')}
+            </div>
             <div class="alan-izgara">
               <div class="alan"><label for="d-bas">Yayın başlangıcı</label>
                 <input id="d-bas" name="baslangic" type="datetime-local" value="${yerelGirdi(bas)}" required>${hata('baslangic')}</div>
@@ -2324,7 +2403,7 @@
             <p class="alan-ipucu" data-sure-ozet></p>
             ${talep ? `<p class="alan-ipucu">Önerilen duyurular en fazla 3 ay yayında kalabilir.</p>` : ''}
           </fieldset>
-          ${talep ? `<div class="bilgi-kutu">${ikon('bilgi', 'kucuk')}<span>Onaylanınca bildirimleri açık olan herkesin telefonuna “Yeni duyuru” bildirimi gider. Duyurunun altında adınız ve ${benim && benim.tur === 'ogretmen' ? 'branşınız' : 'mezuniyet yılınız'} “Paylaşan” olarak görünür.</span></div>` : `<fieldset class="form-bolum">
+          ${talep ? `<div class="bilgi-kutu">${ikon('bilgi', 'kucuk')}<span>Onaylanınca hedef kitlede bildirimleri açık olanların telefonuna “Yeni duyuru” bildirimi gider. Duyurunun altında adınız ve ${benim && benim.tur === 'ogretmen' ? 'branşınız' : 'mezuniyet yılınız'} “Paylaşan” olarak görünür.</span></div>` : `<fieldset class="form-bolum">
             <legend>Bildirim ve e-posta</legend>
             <label class="onay-kutusu">
               <input type="checkbox" name="bildirim" ${d && /^\d{4}-/.test(d.bildirim || '') ? 'checked disabled' : d && d.bildirim === 'yok' ? '' : 'checked'}>
@@ -2354,6 +2433,7 @@
     const topla = () => ({
       id: d ? d.id : '',
       baslik: f.baslik.value, metin: f.metin.value, tur: f.tur.value, hedef: f.hedef ? f.hedef.value : 'herkes',
+      yillar: [...f.querySelectorAll('[name="yillar"]:checked')].map(x => +x.value),
       baglantiUrl: f.baglantiUrl.value.trim(), baglantiMetni: f.baglantiMetni.value,
       baslangic: zaman(f.baslangic.value), bitis: zaman(f.bitis.value),
       eposta: !!f.eposta && f.eposta.checked && !epostaGitti,
@@ -2365,8 +2445,11 @@
       $katman.querySelector('[data-onizleme]').innerHTML = duyuruKarti({
         tur: v.tur, baslik: v.baslik || 'Duyuru başlığı', metin: v.metin || 'Duyuru metni burada görünecek.',
         baglantiUrl: /^https?:\/\//i.test(v.baglantiUrl) ? v.baglantiUrl : '', baglantiMetni: v.baglantiMetni,
-        baslangic: v.baslangic, bitis: v.bitis, paylasan: benim || (d && d.paylasan)
+        baslangic: v.baslangic, bitis: v.bitis, paylasan: benim || (d && d.paylasan), hedef: v.hedef, yillar: v.yillar
       });
+      const yilAlani = $katman.querySelector('[data-yil-secimi]');
+      yilAlani.hidden = v.hedef !== 'yil';
+      $katman.querySelector('[data-yil-ozet]').textContent = v.yillar.length ? `${v.yillar.length} yıl seçildi: ${yilListesiYazisi(v.yillar)}` : 'Henüz yıl seçilmedi';
       const b = new Date(f.baslangic.value), s = new Date(f.bitis.value);
       const gun = (s - b) / 864e5;
       $katman.querySelectorAll('[data-sure]').forEach(c => c.classList.toggle('aktif', Math.abs(gun - c.dataset.sure) < 0.01));
@@ -2376,6 +2459,14 @@
     };
     f.addEventListener('input', guncelle);
     f.addEventListener('change', guncelle);
+    // Belirli yıllar seçilince mezunun kendi yılı hazır işaretlenir.
+    f.querySelectorAll('[name="hedef"]').forEach(x => x.addEventListener('change', async () => {
+      if (!talep || x.value !== 'yil' || !x.checked || f.querySelector('[name="yillar"]:checked') || S.oturum.rol !== 'mezun') return;
+      let yil = benim && benim.yil;
+      if (!yil) { try { yil = (await Api.mezun(S.oturum.id)).yil; } catch (e) { return; } }
+      const kendi = f.querySelector(`[name="yillar"][value="${yil}"]`);
+      if (kendi && !f.querySelector('[name="yillar"]:checked')) { kendi.checked = true; guncelle(); }
+    }));
     $katman.querySelectorAll('[data-sure]').forEach(c => c.addEventListener('click', () => {
       let b = new Date(f.baslangic.value);
       if (isNaN(b)) { b = new Date(); f.baslangic.value = yerelGirdi(b); }
@@ -2385,17 +2476,21 @@
     guncelle();
 
     formuBagla(f, async v => {
+      if (v.hedef === 'yil' && !v.yillar.length) {
+        const e = new Error('En az bir mezuniyet yılı seçin.'); e.kullaniciMesaji = true; e.alanlar = { yillar: 'En az bir mezuniyet yılı seçin.' };
+        throw e;
+      }
       if (talep) {
         if (!await onayIste('Duyurunuz okul yönetiminin onayına gönderilecek.', 'Onaya gönder', false, {
           baslik: 'Duyuru onaya gönderilsin mi?', ikon: 'duyuru', maddeler: [
             'Onaylanana kadar duyuruyu yalnızca siz ve yöneticiler görebilir.',
-            'Onaylanınca tüm mezun ve öğretmenler görür; altında adınız “Paylaşan” olarak yer alır.',
+            `Onaylanınca ${v.hedef === 'yil' ? esc(hedefYazisi(v)) : 'tüm mezun ve öğretmenler'} görür; altında adınız “Paylaşan” olarak yer alır.`,
             'Onaylanıp onaylanmadığı ve varsa red sebebi size bildirim olarak gelir.'] })) return;
         await Api.duyuruTalebi(v);
         bildir('Duyuru öneriniz yöneticilere iletildi. Sonucu size bildireceğiz.', 'basarili');
         return git('#/duyurular');
       }
-      if (v.eposta && !await onayIste(`Duyuru, “${HEDEF_ADI[v.hedef]}” kitlesindeki herkese e-postayla da gönderilecek. Bu işlem geri alınamaz.`, 'Yayınla ve gönder')) return;
+      if (v.eposta && !await onayIste(`Duyuru, “${hedefYazisi(v)}” kitlesindeki herkese e-postayla da gönderilecek. Bu işlem geri alınamaz.`, 'Yayınla ve gönder')) return;
       const r = await Api.duyuruKaydet(v);
       bildir(d ? 'Duyuru güncellendi.' : r.durum === 'planli' ? 'Duyuru planlandı; başlangıç tarihinde yayına girecek.' : 'Duyuru yayınlandı.', 'basarili');
       S.duyuruSekmesi = r.durum;
@@ -2411,7 +2506,7 @@
     const ileri = new Date(d.baslangic) > new Date();
     if (!await onayIste(`“${d.baslik || 'Duyuru'}” yayına alınacak.`, 'Onayla ve yayınla', false, {
       baslik: 'Duyuru onaylansın mı?', ikon: 'tamam', maddeler: [
-        ileri ? `Duyuru ${tarihSaat(d.baslangic)} tarihinde yayına girer.` : 'Duyuru hemen tüm mezun ve öğretmenlere görünür.',
+        ileri ? `Duyuru ${tarihSaat(d.baslangic)} tarihinde yayına girer.` : `Duyuru hemen ${d.hedef === 'yil' ? yilListesiYazisi(d.yillar) + ' mezunlarına' : 'tüm mezun ve öğretmenlere'} görünür.`,
         'Bildirimleri açık olanların telefonuna “Yeni duyuru” bildirimi gider.',
         `${kim}, duyurusunun onaylandığını bildirim olarak öğrenir.`] })) return;
     try {
@@ -3030,6 +3125,7 @@
       case 'talep-kabul': return talepYanitla(id, 'kabul');
       case 'talep-red': return talepYanitla(id, 'red');
       case 'talep-geri': return talepYanitla(id, 'geri');
+      case 'talep-sil': return talepSil(id);
       case 'yonetici-yap': return yetkiIslemi(id, true);
       case 'yonetici-kaldir': return yetkiIslemi(id, false);
       case 'panel-yetki-kaldir': {
