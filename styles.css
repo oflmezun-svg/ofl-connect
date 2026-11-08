@@ -996,3 +996,19 @@ tr.cevrimici .avatar::after { content: ""; position: absolute; right: -1px; bott
 .talep-dugmeler { flex-wrap: wrap; align-items: center; justify-content: flex-end; }
 .talep-sil { color: var(--tehlike, #b0182a); }
 @media (max-width: 680px) { .talep-dugmeler { justify-content: flex-start; } .talep-dugmeler .dugme.talep-sil { flex: 0 0 auto; } }
+
+/* Destek mesajları */
+.destek-serit { display: flex; align-items: center; gap: 12px; padding: 14px 16px; margin-bottom: 16px; background: var(--yuzey); border: 1px solid var(--cizgi); border-radius: 12px; color: var(--metin); text-decoration: none; }
+.destek-serit:hover { background: var(--yuzey-2); }
+.destek-serit.dikkat { background: var(--turuncu-zemin); border-color: transparent; }
+.destek-serit > span { display: grid; gap: 2px; min-width: 0; }
+.destek-serit small { color: var(--metin-2); }
+.destek-listesi { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.destek-listesi > li { display: grid; gap: 10px; min-width: 0; padding: 16px; background: var(--yuzey); border: 1px solid var(--cizgi); border-radius: 12px; }
+.destek-listesi p { margin: 0; }
+.destek-bas { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.destek-bas > span:first-child { display: grid; gap: 2px; min-width: 0; }
+.destek-bas small { color: var(--soluk); }
+.destek-metin { padding: 10px 12px; background: var(--yuzey-2); border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.destek-iletisim { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: .88rem; color: var(--metin-2); overflow-wrap: anywhere; }
+.destek-eylem { display: flex; flex-wrap: wrap; gap: 8px; }

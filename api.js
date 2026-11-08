@@ -101,10 +101,6 @@
     hesap: hesapOku,
     hesapUnut() { hesapYaz(null); },
 
-    girisKoduGonder: eposta => cagir('kodGonder', { eposta }),
-    async girisYap(eposta, kod, hatirla) {
-      return oturumAc(await cagir('girisYap', { eposta, kod, hatirla: !!hatirla }), hatirla);
-    },
     async sifreIleGiris(eposta, sifre, hatirla) {
       return oturumAc(await cagir('sifreIleGiris', { eposta, sifre, hatirla: !!hatirla }), hatirla);
     },
@@ -149,6 +145,8 @@
     reddedilenler: () => cagir('reddedilenler'),
     reddet: (id, sebep, bildir) => cagir('reddet', { id, sebep, bildir }),
     destekGonder: v => cagir('destekGonder', v),
+    destekMesajlari: () => cagir('destekMesajlari'),
+    destekDurum: (id, durum) => cagir('destekDurum', { id, durum }),
     cevrimici: () => cagir('cevrimici'),
     kullaniciSifre: (id, islem, sifre) => cagir('kullaniciSifre', { id, islem, sifre }),
     silmeTalepleri: () => cagir('silmeTalepleri'),

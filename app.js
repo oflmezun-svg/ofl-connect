@@ -249,6 +249,20 @@
     admin: [['rehber', 'Rehber', 'kisiler'], ['duyurular', 'Duyurular', 'duyuru'], ['basvurular', 'Başvurular', 'gelen'], ['panel', 'Yönetim Paneli', 'grafik']]
   };
 
+  // Rehberde de kaydı olan yöneticiye gelen iletişim talepleri için menüye Talepler eklenir.
+  function menuListesi() {
+    if (S.oturum.rol !== 'admin') return MENU[S.oturum.rol] || MENU.mezun;
+    if (!S.talepHakki) return MENU.admin;
+    return [...MENU.admin.slice(0, 2), UYE_MENU[2], ...MENU.admin.slice(2)];
+  }
+
+  async function talepHakkiniOgren() {
+    if (!S.oturum || S.oturum.rol !== 'admin') return false;
+    if (S.talepHakki !== undefined) return S.talepHakki;
+    try { S.talepHakki = !!(await Api.hesabim()).uyeKaydi; } catch (e) { return false; }
+    return S.talepHakki;
+  }
+
   async function yonlendir() {
     cekmeceKapat('rota');
     const yol = location.hash.replace(/^#\/?/, '');
@@ -272,10 +286,13 @@
     if (S.gecmis.length > 30) S.gecmis.shift();
     S.sonYol = yol;
 
-    const menu = MENU[S.oturum.rol] || MENU.mezun;
-    if (!menu.some(m => m[0] === yol)) { location.replace('#/rehber'); return; }
-    kabuk(yol);
-    const ekran = { rehber: rehberEkrani, duyurular: duyurularEkrani, talepler: taleplerEkrani, profil: profilEkrani, basvurular: basvurularEkrani, panel: panelEkrani }[yol];
+    // Bildirimden Talepler'e gelen yöneticinin hakkı öğrenilmeden yönlendirme yapılmaz.
+    if (yol === 'talepler') await talepHakkiniOgren();
+    // Destek ekranı Yönetim Paneli'nin altındadır; alt menüye sığması için ayrı menü öğesi yoktur.
+    const destekRotasi = yol === 'destek' && S.oturum.rol === 'admin';
+    if (!destekRotasi && !menuListesi().some(m => m[0] === yol)) { location.replace('#/rehber'); return; }
+    kabuk(destekRotasi ? 'panel' : yol);
+    const ekran = { rehber: rehberEkrani, duyurular: duyurularEkrani, talepler: taleplerEkrani, profil: profilEkrani, basvurular: basvurularEkrani, panel: panelEkrani, destek: destekEkrani }[yol];
     try {
       await ekran();
       if (!S.acilisYapildi) { S.acilisYapildi = true; acilisIslemleri(); }
@@ -293,15 +310,30 @@
     else location.hash = hash;
   }
 
-  function kabuk(aktif) {
+  function menuHtmlUret(aktif) {
     const admin = S.oturum.rol === 'admin';
     const rozet = y => y === 'basvurular' ? '<span class="menu-rozet" data-rozet hidden></span>'
+      : y === 'panel' ? '<span class="menu-rozet" data-panel-rozet hidden></span>'
       : y === 'duyurular' ? (admin ? '<span class="menu-rozet" data-duyuru-talep-rozet hidden></span>' : '<span class="menu-rozet" data-duyuru-rozet hidden></span>')
       : y === 'talepler' ? '<span class="menu-rozet" data-talep-rozet hidden></span>' : '';
-    const menuHtml = (MENU[S.oturum.rol] || MENU.mezun).map(([y, ad, ik]) =>
+    return menuListesi().map(([y, ad, ik]) =>
       `<a href="#/${y}" class="menu-ogesi ${y === aktif ? 'aktif' : ''}" ${y === aktif ? 'aria-current="page"' : ''}>
         ${ikon(ik)}<span>${ad}</span>${rozet(y)}
       </a>`).join('');
+  }
+
+  // Sayfayı yeniden çizmeden yalnızca menüyü günceller.
+  function menuYenile() {
+    const html = menuHtmlUret(S.aktifMenu);
+    document.querySelectorAll('nav.menu, nav.alt-menu').forEach(n => { n.innerHTML = html; });
+    rozetleriGuncelle();
+    if (S.talepler) talepRozeti(S.talepler);
+  }
+
+  function kabuk(aktif) {
+    const admin = S.oturum.rol === 'admin';
+    S.aktifMenu = aktif;
+    const menuHtml = menuHtmlUret(aktif);
     const parca = S.oturum.ad.split(' ');
     const ben = { id: S.oturum.id, ad: parca[0], soyad: parca.slice(-1)[0] };
 
@@ -339,6 +371,7 @@
     kurulumDugmesiniGuncelle();
     if (admin) rozetleriGuncelle();
     else duyuruRozetiniGuncelle();
+    if (S.talepler) talepRozeti(S.talepler);
   }
 
   async function rozetleriGuncelle() {
@@ -348,6 +381,8 @@
       document.querySelectorAll('[data-rozet]').forEach(el => { el.textContent = n; el.hidden = !n; });
       const t = r.duyuruTalebi || 0;
       document.querySelectorAll('[data-duyuru-talep-rozet]').forEach(el => { el.textContent = t; el.hidden = !t; });
+      const d = r.destek || 0;
+      document.querySelectorAll('[data-panel-rozet]').forEach(el => { el.textContent = d; el.hidden = !d; });
     } catch (e) { /* rozet önemsiz; sessizce geç */ }
   }
 
@@ -496,11 +531,11 @@
   }
 
   function girisTamam(o) {
-    // Kodla girip henüz şifresi olmayanlara bir kez şifre belirleme önerilir;
+    // Henüz şifresi olmayanlara bir kez şifre belirleme önerilir;
     // yöneticinin verdiği geçici şifreyle girenler kendi şifresini belirlemek zorundadır.
     S.sifreOner = !o.sifreVar && !yerelDepo('ofl-sifre-onerisi-' + o.id);
     S.sifreDegistir = !!o.degistirmeli;
-    S.yoneticiListesi = null; S.asil = false;
+    S.yoneticiListesi = null; S.asil = false; S.talepHakki = undefined; S.talepler = null;
     S.yeniGiris = true;
     S.acilisYapildi = false;
     S.gecmis = [];
@@ -721,12 +756,12 @@
     $katman.querySelector('[data-sifre-kaydet]').addEventListener('click', gonder);
   }
 
-  // Kodla ilk girişten sonra bir kez gösterilir.
+  // Şifresi olmayan hesaba bir kez gösterilir.
   function sifreOnerisi() {
     const anahtar = 'ofl-sifre-onerisi-' + S.oturum.id;
     cekmeceAc({
       etiket: 'Giriş şifresi belirleyin', orta: true,
-      bas: `<div><h2>Giriş şifresi belirleyin</h2><p class="soluk">Sonraki girişlerde e-posta kodu beklemeden, yalnızca şifrenizle girin.</p></div>`,
+      bas: `<div><h2>Giriş şifresi belirleyin</h2><p class="soluk">Sonraki girişlerde e-posta adresiniz ve bu şifreyle girersiniz.</p></div>`,
       govde: `<div class="bilgi-kutu">${ikon('anahtar')}<span>E-posta adresiniz bu cihazda hatırlanır; giriş ekranında yalnızca şifreniz sorulur. Şifrenizi unutursanız giriş ekranındaki “Şifremi unuttum” bağlantısıyla e-postanıza gelen kodla yenisini belirleyebilirsiniz.</span></div>
         ${sifreFormu(true)}`,
       alt: `<button class="dugme ikincil" data-sifre-sonra>Şimdi değil</button>
@@ -1482,7 +1517,7 @@
           <div class="talep-eylem"><div class="talep-dugmeler">${durumCipi(x)}${silDugmesi(x)}</div>
           <small class="soluk">${x.yanit ? tarihYaz(x.yanit) + ' · ' : ''}Numaranız bu kişiye gizli. Kaydı silerek listenizden kaldırabilirsiniz.</small></div></li>`).join('')}</ul>
       </section>` : ''}
-      <section class="kart talep-bolum">
+      ${S.oturum.rol === 'admin' && !t.giden.length ? '' : `<section class="kart talep-bolum">
         <h3>Gönderdiğiniz talepler</h3>
         ${t.giden.length ? `<ul class="talep-listesi">${t.giden.map(x => {
           return `<li>${kisi(x)}<div class="talep-eylem">
@@ -1492,7 +1527,7 @@
               : x.durum === 'geri' ? 'Kişi numarasını görme iznini geri aldı.' : `${tarihYaz(x.olusturma)} tarihinde gönderildi.`}</small></div></li>`;
         }).join('')}</ul>`
           : `<p class="soluk">Henüz talep göndermediniz. Rehberde telefon numarası gizli birini açıp “İletişim talebi gönder”e basabilirsiniz.</p>`}
-      </section>`;
+      </section>`}`;
     if (t.giden.some(x => x.yeni)) {
       Api.iletisimGoruldu().then(() => { t.giden.forEach(x => { x.yeni = false; }); talepRozeti(t); }).catch(() => {});
     }
@@ -1873,7 +1908,7 @@
           </div>
           <div class="kart">
             <h3>Giriş ve şifre</h3>
-            <p class="soluk kucuk-yazi">Bir giriş şifresi belirlerseniz e-posta kodu beklemeden yalnızca şifrenizle girebilirsiniz.</p>
+            <p class="soluk kucuk-yazi">Sisteme e-posta adresiniz ve şifrenizle girersiniz. Şifrenizi buradan değiştirebilirsiniz.</p>
             <button class="dugme ikincil genis" data-ac="hesap">${ikon('anahtar')}<span>Şifre ayarları</span></button>
           </div>
           <div class="kart">
@@ -2591,7 +2626,10 @@
 
   async function acilisIslemleri() {
     const uye = S.oturum.rol !== 'admin';
-    if (!uye) yoneticiBilgisi(true).catch(() => {});
+    if (!uye) {
+      yoneticiBilgisi(true).catch(() => {});
+      talepHakkiniOgren().then(hakVar => { if (hakVar && !document.querySelector('nav.menu a[href="#/talepler"]')) menuYenile(); });
+    }
     nabizBaslat();
     pushSessizYenile();
     siraIsle([
@@ -2605,7 +2643,7 @@
       () => S.sifreOner ? (S.sifreOner = false, sifreOnerisi(), true) : false,
       () => uye ? profilTamamlaHatirlat() : false,
       () => bildirimTeklifi(),
-      () => uye ? iletisimKontrol() : false,
+      async () => (uye || await talepHakkiniOgren()) ? iletisimKontrol() : false,
       () => uye ? duyuruTalepKontrol() : false,
       () => uye ? duyuruKontrol().then(() => false) : false
     ]);
@@ -2977,6 +3015,11 @@
         <div class="stat"><span class="stat-etiket">${ikon('telefon', 'kucuk')} Telefonunu paylaşan</span><span class="stat-deger">%${yuzde(ist.telefonPaylasan)}</span><span class="stat-alt">E-postasını paylaşan %${yuzde(ist.epostaPaylasan)}</span></div>
       </div>
 
+      <a class="destek-serit ${ist.destekYeni ? 'dikkat' : ''}" href="#/destek">
+        ${ikon('mesaj')}
+        <span><strong>Destek mesajları</strong><small>${ist.destekYeni ? `${ist.destekYeni} yeni mesaj var. Görmek için tıklayın.` : 'Yeni mesaj yok. Giriş ekranındaki yardım formundan gelenler burada listelenir.'}</small></span>
+      </a>
+
       ${silinenlerBolumu(silinenler)}
 
       <div class="panel-izgara">
@@ -3024,6 +3067,82 @@
           </div>
         </div>
       </div>`;
+  }
+
+  /* ---------- Destek mesajları (giriş ekranındaki yardım formu) ---------- */
+
+  const DESTEK_ALT = 'Giriş ekranındaki yardım formundan gelen mesajlar';
+  const destekEylem = () => `<a class="dugme ikincil" href="#/panel">${ikon('grafik')}<span>Yönetim Paneli</span></a>`;
+
+  async function destekEkrani() {
+    byId('icerik').innerHTML = sayfaBasi('Destek mesajları', DESTEK_ALT, destekEylem()) + yukleniyor();
+    S.destek = await Api.destekMesajlari();
+    destekCiz();
+  }
+
+  // Formdaki telefon elle yazıldığı için arama bağlantısından önce 05xx biçimine getirilir.
+  function destekTelefonu(t) {
+    let r = telRakam(t);
+    if (r.length === 12 && r.startsWith('90')) r = r.slice(1);
+    if (r.length === 10) r = '0' + r;
+    return /^0\d{10}$/.test(r) ? r : '';
+  }
+
+  function destekKart(m) {
+    const tel = destekTelefonu(m.telefon);
+    const konu = 'OFL Connect yardım mesajınız: ' + m.konu;
+    const kisi = !m.kisi ? '<span class="durum-cip gri">Sistemde kaydı yok</span>'
+      : m.kisi.durum === 'onayli' ? `<button class="dugme metin kucuk" data-ac="detay" data-id="${esc(m.kisi.id)}">${ikon('kisi', 'kucuk')}<span>Kaydını aç</span></button>`
+      : m.kisi.durum === 'beklemede' ? `<button class="dugme metin kucuk" data-ac="incele" data-id="${esc(m.kisi.id)}">${ikon('gelen', 'kucuk')}<span>Başvurusu onay bekliyor</span></button>`
+      : '<span class="durum-cip gri">Başvurusu reddedilmiş</span>';
+    return `<li>
+      <div class="destek-bas">
+        <span><strong>${esc(m.ad)}</strong><small>${esc(tarihSaat(m.tarih))}</small></span>
+        <span class="durum-cip turuncu">${esc(m.konu)}</span>
+      </div>
+      <p class="destek-metin">${esc(m.mesaj)}</p>
+      <p class="destek-iletisim"><span>${esc(m.eposta)}</span>${m.telefon ? `<span>${esc(m.telefon)}</span>` : ''}${kisi}</p>
+      ${m.iletildi ? '' : `<p class="uyari">Günlük e-posta sınırı dolu olduğu için bu mesaj sistem hesabına e-postayla iletilemedi.</p>`}
+      ${m.durum === 'cozuldu' ? `<p class="soluk kucuk-yazi">${esc(m.cozen || 'Bir yönetici')} çözüldü olarak işaretledi${m.cozumTarihi ? ' · ' + esc(tarihSaat(m.cozumTarihi)) : ''}</p>` : ''}
+      <div class="destek-eylem">
+        <a class="dugme ikincil kucuk" href="mailto:${esc(encodeURIComponent(m.eposta))}?subject=${esc(encodeURIComponent(konu))}">${ikon('eposta', 'kucuk')}<span>E-postayla yanıtla</span></a>
+        ${tel ? `<a class="dugme ikincil kucuk" href="tel:+9${tel}">${ikon('telefon', 'kucuk')}<span>Ara</span></a>
+        <a class="dugme ikincil kucuk" href="https://wa.me/9${tel}" target="_blank" rel="noopener">${ikon('mesaj', 'kucuk')}<span>WhatsApp</span></a>` : ''}
+        ${m.durum === 'cozuldu'
+          ? `<button class="dugme ikincil kucuk" data-ac="destek-durum" data-id="${esc(m.id)}" data-durum="yeni">${ikon('yenile', 'kucuk')}<span>Yeniden aç</span></button>`
+          : `<button class="dugme kucuk" data-ac="destek-durum" data-id="${esc(m.id)}" data-durum="cozuldu">${ikon('tamam', 'kucuk')}<span>Çözüldü</span></button>`}
+      </div>
+    </li>`;
+  }
+
+  function destekCiz() {
+    const ic = byId('icerik');
+    if (!ic) return;
+    const liste = S.destek || [];
+    const yeni = liste.filter(m => m.durum !== 'cozuldu');
+    const cozulen = liste.filter(m => m.durum === 'cozuldu');
+    const sekme = S.destekSekmesi === 'cozuldu' ? 'cozuldu' : 'yeni';
+    const gosterilen = sekme === 'cozuldu' ? cozulen : yeni;
+    const sekmeDugmesi = (ad, yazi, n) => `<button role="tab" class="sekme ${sekme === ad ? 'aktif' : ''}" aria-selected="${sekme === ad}" data-ac="destek-sekme" data-sekme="${ad}">${yazi} <span class="sayac">${n}</span></button>`;
+    ic.innerHTML = `
+      ${sayfaBasi('Destek mesajları', DESTEK_ALT, destekEylem())}
+      <div class="sekmeler" role="tablist">${sekmeDugmesi('yeni', 'Yeni', yeni.length)}${sekmeDugmesi('cozuldu', 'Çözülenler', cozulen.length)}</div>
+      <div role="tabpanel">${gosterilen.length
+        ? `<ul class="destek-listesi">${gosterilen.map(destekKart).join('')}</ul>`
+        : bosDurum('tamam', sekme === 'yeni' ? 'Yeni mesaj yok' : 'Çözülmüş mesaj yok', sekme === 'yeni' ? 'Yardım formundan gelen mesajlar burada görünür.' : '')}</div>`;
+    const d = yeni.length;
+    document.querySelectorAll('[data-panel-rozet]').forEach(el => { el.textContent = d; el.hidden = !d; });
+  }
+
+  async function destekDurumDegistir(id, durum, dugme) {
+    dugme.disabled = true;
+    try {
+      const r = await Api.destekDurum(id, durum);
+      const m = (S.destek || []).find(x => x.id === id);
+      if (m) Object.assign(m, r);
+      bildir(durum === 'cozuldu' ? 'Mesaj çözüldü olarak işaretlendi.' : 'Mesaj yeniden açıldı.', 'basarili');
+      destekCiz();
+    } catch (e) { dugme.disabled = false; hataGoster(e); }
   }
 
   // Silinen kişiler: 3 gün geri alınabilir, sonra sunucu kaydı tamamen siler.
@@ -3084,6 +3203,8 @@
       case 'basvuru-duzenle': return mezunDuzenle(id, () => basvuruIncele(id));
       case 'sil': ev.stopPropagation(); return kayitSil(id);
       case 'silme-geri-al': return silmeyiGeriAl(id);
+      case 'destek-sekme': S.destekSekmesi = el.dataset.sekme; return destekCiz();
+      case 'destek-durum': return destekDurumDegistir(id, el.dataset.durum, el);
       case 'yeni': return kullaniciEkle();
       case 'hesap': return hesapAc();
       case 'duyuru-yeni': return duyuruEditoru();
@@ -3179,10 +3300,10 @@
       case 'cikis':
         if (!await onayIste('Bu cihazda oturumunuz kapanacak.', 'Çıkış yap', false, {
           baslik: 'Çıkış yapılsın mı?', ikon: 'cikis',
-          maddeler: ['Tekrar girmek için e-posta kodu ya da şifreniz gerekir.', 'Bu cihaza gelen telefon bildirimleri durur.']
+          maddeler: ['Tekrar girmek için şifreniz gerekir.', 'Bu cihaza gelen telefon bildirimleri durur.']
         })) return;
         await bildirimAboneliginiKaldir();
-        await Api.cikis(); S.liste = []; S.basvurular = []; S.filtre = { q: '', tur: '', calisma: '', cevrimici: false, yil: '', sehir: '', sirala: 'yil' }; S.sayfa = 1; S.duyurular = null; S.acilisYapildi = false; S.gecmis = []; return git('#/');
+        await Api.cikis(); S.liste = []; S.basvurular = []; S.filtre = { q: '', tur: '', calisma: '', cevrimici: false, yil: '', sehir: '', sirala: 'yil' }; S.sayfa = 1; S.duyurular = null; S.acilisYapildi = false; S.gecmis = []; S.talepHakki = undefined; S.talepler = null; S.destek = null; return git('#/');
       case 'kur':
         if (S.kurulumOlayi) { S.kurulumOlayi.prompt(); S.kurulumOlayi = null; kurulumDugmesiniGuncelle(); }
         else kurulumRehberi(true);

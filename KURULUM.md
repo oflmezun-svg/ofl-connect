@@ -18,7 +18,7 @@ Kodlama bilgisi gerekmez; adımları sırayla izlemeniz yeterli.
 Sistemi kişisel hesabınızla değil, **okul adına açılmış ayrı bir hesapla** kurun
 (ör. `oflconnect.mezun@gmail.com`; okulun Google Workspace hesabı varsa o daha iyidir).
 
-- Giriş kodları ve bildirimler bu hesaptan gönderilir.
+- Doğrulama kodları ve bildirimler bu hesaptan gönderilir.
 - Görev değişikliğinde hesap kolayca devredilir.
 - Hesapta **2 adımlı doğrulamayı** mutlaka açın. Tüm verilerin güvenliği bu hesaba bağlıdır.
 
@@ -90,8 +90,8 @@ Bu adres girildiğinde demo modu kapanır, uygulama gerçek verilerle çalışı
 
 ## 8. Deneyin
 
-1. Uygulama adresini açın ve okul hesabının e-postasıyla giriş kodu isteyin.
-2. Gelen 6 haneli kodla giriş yapın. **Yönetim Paneli** görünmelidir.
+1. Uygulama adresini açın, **Şifremi unuttum / şifrem yok** bağlantısına basın ve okul hesabının e-postasını yazın.
+2. Gelen 6 haneli kodla şifrenizi belirleyin. Giriş yapılır ve **Yönetim Paneli** görünür.
 3. Telefonunuzdan bir test başvurusu yapın, ardından yönetici olarak **Başvurular** sayfasından onaylayın.
 
 ---
@@ -103,7 +103,7 @@ Bu adres girildiğinde demo modu kapanır, uygulama gerçek verilerle çalışı
 - **Yanlışlıkla reddetme:** Reddedilen başvuru hemen silinmez; **Başvurular → Reddedilenler** sekmesinde 30 gün durur ve
   oradan onaylanabilir. 30 gün sonra kendiliğinden kalıcı olarak silinir. Kişi aynı e-postayla yeniden de başvurabilir.
 - **Şifresini unutan kullanıcı:** Giriş ekranındaki **Şifremi unuttum** bağlantısıyla e-postasına gelen kodla yeni şifre belirler
-  ve doğrudan giriş yapar. Yönetici de kişinin bilgi penceresinden **Şifreyi sıfırla** (kişi e-posta koduyla girip yenisini belirler)
+  ve doğrudan giriş yapar. Yönetici de kişinin bilgi penceresinden **Şifreyi kaldır** (kişi e-postasına gelen kodla yenisini belirler)
   veya **Geçici şifre ver** (kişiye siz iletirsiniz; ilk girişte kendi şifresini belirlemek zorundadır) seçebilir. Her iki durumda
   kişiye bilgi e-postası gider.
 - **Çevrimiçi kullanıcılar:** Yönetici rehberde son 5 dakikada uygulamayı kullananları yeşil işaretle ve listenin en üstünde görür
@@ -126,9 +126,9 @@ Bu adres girildiğinde demo modu kapanır, uygulama gerçek verilerle çalışı
   **Duyurular** sayfasında durur. Bitiş tarihi geçince kullanıcıların ekranından kendiliğinden kalkar.
   **E-postayla da gönder** seçilirse duyuru hedef kitledeki herkese gizli alıcı (BCC) olarak e-postayla gider.
   Günlük e-posta sınırı dolarsa kalanlar ertesi gün otomatik gönderilir (saatlik görev **kuyrukIsle**; kurulum bunu kendisi tanımlar).
-- **Giriş şifresi:** Kullanıcılar ilk girişi e-posta koduyla yapar; ardından isterlerse bir şifre belirler. Sonraki
+- **Giriş şifresi:** Kullanıcılar e-posta ve şifreyle girer; şifre kayıtta ya da e-postaya gelen kodla belirlenir. Sonraki
   girişlerde e-posta adresi cihazda hatırlanır, yalnızca şifre sorulur. Şifreler e-tabloda düz metin olarak değil,
-  kişiye özel tuzla karıştırılmış özet olarak **Kimlik** sayfasında tutulur. Şifresini unutan “e-posta koduyla gir”
+  kişiye özel tuzla karıştırılmış özet olarak **Kimlik** sayfasında tutulur. Şifresini unutan **Şifremi unuttum**
   bağlantısını kullanır. **Bu cihazda oturumum açık kalsın** seçilirse oturum 90 gün, seçilmezse 12 saat sürer.
 - **Herkesi sistemden çıkarmak** (ör. şüpheli durum): **OFL Connect → Tüm oturumları kapat**.
 - **Yedek:** E-tablonun **Dosya → Sürüm geçmişi**'nde her değişiklik zaten saklanır. Ayrıca dönem sonlarında
@@ -145,12 +145,12 @@ toplu aktarılan kişilerin rızası alınmamış olur.
 
 | Konu | Ücretsiz Gmail hesabı | Google Workspace hesabı |
 |---|---|---|
-| Günlük e-posta alıcısı (giriş kodu + bildirim + duyuru) | 100 | 1.500 |
+| Günlük e-posta alıcısı (doğrulama kodu + bildirim + duyuru) | 100 | 1.500 |
 | E-tablo kapasitesi | 10 milyon hücre (≈ 500.000 mezun) | aynı |
 
-Oturum 90 güne kadar açık kalabildiği ve kullanıcılar şifreyle girebildiği için giriş kodları sınırı az kullanır.
+Oturum 90 güne kadar açık kalabildiği ve kullanıcılar şifreyle girdiği için doğrulama kodları sınırı az kullanır.
 E-postalı duyurular bu sınırı en çok tüketen işlemdir: 1.000 kişilik bir duyuru ücretsiz hesapta yaklaşık 12 günde
-tamamlanır (her gün 15 e-postalık pay giriş kodlarına ayrılır). Bu yüzden e-posta seçeneğini yalnızca önemli
+tamamlanır (her gün 15 e-postalık pay doğrulama kodlarına ayrılır). Bu yüzden e-posta seçeneğini yalnızca önemli
 duyurularda kullanın. Sınır dolarsa veri kaybı olmaz; bekleyen e-postalar ertesi gün kaldığı yerden gider.
 
 ## Uygulamada değişiklik yaptıktan sonra

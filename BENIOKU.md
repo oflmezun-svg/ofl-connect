@@ -25,7 +25,7 @@ Giriş ekranındaki **Yönetici** / **Mezun** / **Öğretmen** düğmeleriyle gi
 | KVKK silme talebi | İşler | Gönderir |
 | Yönetici ekleme | Öğretmen eklerken “Yönetici yetkisi ver” ya da Google E-Tablo'dan | — |
 
-Giriş: ilk seferde e-posta kodu; sonra isteğe bağlı şifre. “Bu cihazda oturumum açık kalsın” seçilirse 90 gün yeniden giriş gerekmez.
+Giriş: e-posta ve şifre. Şifresi olmayan veya unutan kişi, e-postasına gelen kodla şifre belirler. “Bu cihazda oturumum açık kalsın” seçilirse 90 gün yeniden giriş gerekmez.
 
 Gizlilik kuralları sunucuda uygulanır: Bir mezunun gizlediği bilgi diğer mezunların tarayıcısına hiç gönderilmez.
 

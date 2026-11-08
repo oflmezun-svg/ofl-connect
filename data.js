@@ -282,6 +282,18 @@
     const isteyen = D.kayitlar.find(k => k.durum === 'onayli' && k.tur === 'mezun' && k !== elif);
     D.iletisim = elif && isteyen ? [{ id: 'it-ornek', isteyen: isteyen.id, hedef: elif.id, durum: 'bekliyor', olusturma: new Date(Date.now() - 2 * 3600e3).toISOString(), yanit: '', goruldu: '' }] : [];
   }
+  // Destek ekranı boş görünmesin diye hayali yardım mesajları.
+  if (!D.destek) {
+    const once = saat => new Date(Date.now() - saat * 3600e3).toISOString();
+    D.destek = [
+      { id: 'dm-3', tarih: once(2), ad: 'Selin Korkmaz', eposta: 'selin.korkmaz@example.com', telefon: '0500 000 00 03', konu: 'Şifre',
+        mesaj: 'Şifremi unuttum, sıfırlama kodu da e-postama gelmedi. Yardımcı olabilir misiniz?', iletildi: true, durum: 'yeni', cozen: '', cozumTarihi: '' },
+      { id: 'dm-2', tarih: once(26), ad: 'Burak Aslan', eposta: 'burak.aslan@example.com', telefon: '', konu: 'Kayıt ve onay',
+        mesaj: 'Başvurumu geçen hafta yaptım, hâlâ onay bekliyor görünüyor. Ne kadar sürer?', iletildi: true, durum: 'yeni', cozen: '', cozumTarihi: '' },
+      { id: 'dm-1', tarih: once(96), ad: 'Deniz Polat', eposta: 'deniz.polat@example.com', telefon: '0500 000 00 01', konu: 'Bilgilerimi güncelleme',
+        mesaj: 'Mezuniyet yılımı yanlış girmişim, nasıl düzeltebilirim?', iletildi: true, durum: 'cozuldu', cozen: YONETICI_EPOSTA, cozumTarihi: once(90) }
+    ];
+  }
   // Üye duyuru talepleri: yönetici ekranında görünsün diye onay bekleyen bir örnek.
   if (!D.duyuruTalepOrnegi) {
     D.duyuruTalepOrnegi = true;
@@ -342,6 +354,15 @@
     }
     const son = depoOku('ofl-connect-demo-son-uye');
     return [...new Set(son ? demoCevrimici.concat(son) : demoCevrimici)];
+  }
+
+  // Sunucudaki talepYetkisi_ karşılığı: rehberde de kaydı olan yönetici kendi taleplerini yanıtlar.
+  function talepKimligi() {
+    const o = yetkiGerekli();
+    if (o.rol !== 'admin') return o;
+    const k = D.kayitlar.find(x => x.eposta === o.eposta && x.durum === 'onayli');
+    if (!k) throw hata('Rehberde üye kaydınız olmadığı için iletişim talebiniz bulunmuyor.');
+    return Object.assign({}, o, { id: k.id });
   }
 
   function girisHedefi(eposta) {
@@ -532,7 +553,7 @@
     hesap: () => depoOku(HESAP_ANAHTARI),
     hesapUnut() { depoYaz(HESAP_ANAHTARI, null); },
 
-    async girisKoduGonder(eposta) {
+    async sifreSifirlamaKodu(eposta) {
       await bekle(350);
       eposta = kucuk(eposta);
       if (yoneticiMi(eposta)) return { gonderildi: true };
@@ -540,16 +561,6 @@
       if (!k) throw hata('Bu e-posta ile kayıtlı bir kullanıcı bulunamadı.');
       if (k.durum !== 'onayli') throw hata('Kaydınız henüz yönetici onayı bekliyor.');
       return { gonderildi: true };
-    },
-
-    async girisYap(eposta, kod, hatirla) {
-      await bekle(300);
-      eposta = kucuk(eposta);
-      if (String(kod).trim() !== DEMO_KOD) throw hata('Kod hatalı. Demo için kod: ' + DEMO_KOD);
-      const hedef = girisHedefi(eposta);
-      if (!hedef) throw hata('Giriş yapılamadı.');
-      delete sifreDenemeleri[eposta];
-      return oturumAc(eposta, hedef, hatirla);
     },
 
     async sifreIleGiris(eposta, sifre, hatirla) {
@@ -572,8 +583,6 @@
       if (typeof verildi === 'number' && Date.now() - verildi > 7 * 864e5) throw hata('Geçici şifrenizin süresi doldu (7 gün). Okul yönetiminden yeni şifre isteyin ya da “Şifremi unuttum” bağlantısıyla kendi şifrenizi belirleyin.');
       return Object.assign(oturumAc(eposta, hedef, hatirla), { degistirmeli: !!D.degistirmeli[eposta] });
     },
-
-    async sifreSifirlamaKodu(eposta) { return Api.girisKoduGonder(eposta); },
 
     async sifreYenile(eposta, kod, sifre, hatirla) {
       await bekle(300);
@@ -625,7 +634,8 @@
     async hesabim() {
       const o = yetkiGerekli();
       const eposta = guncelEposta(o);
-      return { eposta, rol: o.rol, sifreVar: !!D.sifreler[eposta], degistirmeli: !!D.degistirmeli[eposta] };
+      return { eposta, rol: o.rol, sifreVar: !!D.sifreler[eposta], degistirmeli: !!D.degistirmeli[eposta],
+        uyeKaydi: o.rol === 'admin' && D.kayitlar.some(x => x.eposta === o.eposta && x.durum === 'onayli') };
     },
 
     async demoGiris(rol, id) {
@@ -697,7 +707,7 @@
     },
 
     async iletisimTalepleri() {
-      const o = yetkiGerekli('uye');
+      const o = talepKimligi();
       await bekle(200);
       const kisi = id => { const k = bul(id); return k && k.durum === 'onayli' ? { id: k.id, ad: k.ad, soyad: k.soyad, yil: k.yil, tur: k.tur, brans: k.tur === 'ogretmen' ? k.brans : '' } : null; };
       const gelen = D.iletisim.filter(t => t.hedef === o.id && !t.silH && kisi(t.isteyen))
@@ -709,7 +719,7 @@
     },
 
     async iletisimYanit(id, kabul) {
-      const o = yetkiGerekli('uye');
+      const o = talepKimligi();
       await bekle(250);
       const t = D.iletisim.find(x => x.id === id && x.hedef === o.id);
       if (!t) throw hata('Talep bulunamadı.');
@@ -722,7 +732,7 @@
     },
 
     async iletisimSil(id) {
-      const o = yetkiGerekli('uye');
+      const o = talepKimligi();
       await bekle(200);
       const t = D.iletisim.find(x => x.id === id && (x.hedef === o.id || x.isteyen === o.id));
       if (!t) throw hata('Talep bulunamadı.');
@@ -738,7 +748,7 @@
     },
 
     async iletisimGoruldu() {
-      const o = yetkiGerekli('uye');
+      const o = talepKimligi();
       D.iletisim.forEach(t => { if (t.isteyen === o.id && (t.durum === 'kabul' || t.durum === 'red') && !t.goruldu) t.goruldu = new Date().toISOString(); });
       kaydet();
       return { ok: true };
@@ -883,7 +893,8 @@
       return {
         bekleyen: D.kayitlar.filter(k => k.durum === 'beklemede').length,
         silme: D.kayitlar.filter(k => k.silmeTalebi).length,
-        duyuruTalebi: D.duyurular.filter(d => d.onay === 'bekliyor').length
+        duyuruTalebi: D.duyurular.filter(d => d.onay === 'bekliyor').length,
+        destek: D.destek.filter(m => m.durum !== 'cozuldu').length
       };
     },
 
@@ -1014,8 +1025,31 @@
     async destekGonder(v) {
       await bekle(300);
       if (!v || !v.ad || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.eposta || '') || String(v.mesaj || '').trim().length < 10) throw hata('Lütfen formu eksiksiz doldurun.');
-      // Demoda mesaj gönderilmez; gerçek sistemde okulun e-posta adresine iletilir.
+      // Demoda e-posta gönderilmez; gerçek sistemde okulun e-posta adresine de iletilir.
+      D.destek.unshift({ id: 'dm-' + Date.now(), tarih: new Date().toISOString(), ad: String(v.ad).trim(), eposta: kucuk(v.eposta), telefon: String(v.telefon || '').trim(),
+        konu: v.konu || 'Diğer', mesaj: String(v.mesaj).trim(), iletildi: true, durum: 'yeni', cozen: '', cozumTarihi: '' });
+      kaydet();
       return { ok: true };
+    },
+
+    async destekMesajlari() {
+      yetkiGerekli('admin');
+      await bekle(200);
+      return D.destek.map(m => {
+        const k = D.kayitlar.find(x => x.eposta === m.eposta);
+        return Object.assign({}, m, { kisi: k ? { id: k.id, durum: k.durum } : null });
+      });
+    },
+
+    async destekDurum(id, durum) {
+      const o = yetkiGerekli('admin');
+      await bekle(150);
+      const m = D.destek.find(x => x.id === id);
+      if (!m) throw hata('Mesaj bulunamadı.');
+      const cozuldu = durum === 'cozuldu';
+      Object.assign(m, { durum: cozuldu ? 'cozuldu' : 'yeni', cozen: cozuldu ? o.eposta : '', cozumTarihi: cozuldu ? new Date().toISOString() : '' });
+      kaydet();
+      return { durum: m.durum, cozen: m.cozen, cozumTarihi: m.cozumTarihi };
     },
 
     async reddedilenler() {
@@ -1123,6 +1157,7 @@
         reddedilen: D.kayitlar.filter(k => k.durum === 'reddedildi').length,
         silmeTalebi: D.kayitlar.filter(k => k.silmeTalebi).length,
         silinen: (D.silinenler || []).length,
+        destekYeni: D.destek.filter(m => m.durum !== 'cozuldu').length,
         telefonPaylasan, epostaPaylasan, epostaKotasi: 100,
         yillar: Object.entries(yillar).map(([yil, adet]) => ({ yil: +yil, adet })),
         sehirler: Object.entries(sehirler).map(([sehir, adet]) => ({ sehir, adet }))
