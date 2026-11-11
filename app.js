@@ -1447,6 +1447,8 @@
       <small class="soluk">${esc(ad)} kabul ederse numarası yalnızca size görünür ve size bildirim gelir; kabul etmezse yine bildirilirsiniz.</small>`;
     else if (r.durum === 'red' && !tekrarGecti) yer.innerHTML = `<span class="durum-cip gri">${ikon('kapat', 'kucuk')}Talebiniz kabul edilmedi</span>
       <small class="soluk">${r.tekrar ? `${tarihYaz(r.tekrar)} tarihinden sonra yeniden talep gönderebilirsiniz.` : ''}</small>`;
+    else if (r.durum === 'iptal' && r.tekrar && new Date(r.tekrar) > new Date()) yer.innerHTML = `<span class="durum-cip gri">${ikon('cop', 'kucuk')}Talebinizi sildiniz</span>
+      <small class="soluk">Bu kişiye ${tarihYaz(r.tekrar)} tarihinden sonra yeniden talep gönderebilirsiniz.</small>`;
     else yer.innerHTML = `<button class="dugme ikincil kucuk" data-ac="iletisim-talebi" data-id="${k.id}">${ikon('mesaj', 'kucuk')}<span>İletişim talebi gönder</span></button>
       <small class="soluk">${esc(ad)} kişisine bildirim gider. Kabul ederse telefon numarası yalnızca size görünür; kabul etmezse size bildirilir.${r.durum === 'geri' ? ' (Daha önce verdiği izni geri aldı.)' : ''}</small>`;
   }
@@ -1500,6 +1502,7 @@
             <div class="talep-dugmeler">
               <button class="dugme ikincil kucuk" data-ac="talep-red" data-id="${esc(x.id)}">${ikon('kapat', 'kucuk')}<span>Reddet</span></button>
               <button class="dugme kucuk" data-ac="talep-kabul" data-id="${esc(x.id)}">${ikon('tamam', 'kucuk')}<span>Kabul et</span></button>
+              ${silDugmesi(x)}
             </div>
             <small class="soluk">Kabul ederseniz telefon numaranız yalnızca bu kişiye görünür; diğer herkes için gizli kalır. Reddederseniz kişiye talebinin kabul edilmediği bildirilir.</small>
           </div></li>`).join('')}</ul>`
@@ -1521,7 +1524,7 @@
         <h3>Gönderdiğiniz talepler</h3>
         ${t.giden.length ? `<ul class="talep-listesi">${t.giden.map(x => {
           return `<li>${kisi(x)}<div class="talep-eylem">
-            <div class="talep-dugmeler">${durumCipi(x)}${x.durum !== 'bekliyor' ? silDugmesi(x) : ''}</div>
+            <div class="talep-dugmeler">${durumCipi(x)}${silDugmesi(x)}</div>
             <small class="soluk">${x.durum === 'kabul' ? 'Telefon numarası artık size görünüyor; kişiye dokunarak arayabilirsiniz.'
               : x.durum === 'red' ? (x.tekrar ? `${tarihYaz(x.tekrar)} tarihinden sonra yeniden talep gönderebilirsiniz.` : '')
               : x.durum === 'geri' ? 'Kişi numarasını görme iznini geri aldı.' : `${tarihYaz(x.olusturma)} tarihinde gönderildi.`}</small></div></li>`;
@@ -1553,22 +1556,29 @@
     } catch (e) { hataGoster(e); }
   }
 
-  // Yanıtlanmış talep kaydını listeden siler (onay sorulur). Kabul edilmiş gelen talepte izin de kalkar.
+  // Talep kaydını listeden siler (onay sorulur). Kabul edilmiş gelen talepte izin kalkar; yanıtlanmamış gelen talep
+  // "kabul edilmedi" sayılır; gönderenin bekleyen talebi geri çekilir.
   async function talepSil(id) {
     const t = S.talepler || { gelen: [], giden: [] };
     const gelen = t.gelen.find(x => x.id === id);
     const x = gelen || t.giden.find(x => x.id === id);
     if (!x) return;
     const ad = x.kisi.ad + ' ' + x.kisi.soyad;
+    const bekliyor = x.durum === 'bekliyor';
     const maddeler = gelen
       ? (x.durum === 'kabul'
         ? ['Kayıt listenizden kaldırılır.', `${ad} artık telefon numaranızı göremez (izin geri alınır).`, 'Kişi isterse yeniden talep gönderebilir; kabul edip etmemek yine size kalır.']
-        : ['Kayıt listenizden kaldırılır.', 'Numaranız bu kişiye gizli kalmaya devam eder.', 'Kişi yeniden talep gönderirse yine burada görürsünüz.'])
-      : ['Kayıt yalnızca sizin listenizden kaldırılır.', x.durum === 'kabul' ? 'Kişinin size verdiği izin değişmez; numarası rehberde görünmeye devam eder.' : 'Gerekirse kişiye yeniden talep gönderebilirsiniz.'];
-    if (!await onayIste(`${ad} ile ilgili talep kaydı silinecek.`, 'Evet, sil', true, { baslik: 'Emin misiniz?', ikon: 'cop', maddeler })) return;
+        : bekliyor
+          ? ['Talep listenizden kaldırılır; numaranız bu kişiye gizli kalır.', 'Talep kabul edilmemiş sayılır. Kişiye ayrıca bildirim gönderilmez, kendi listesinde “Kabul edilmedi” olarak görür.', 'Kişi 7 gün sonra yeniden talep gönderebilir.']
+          : ['Kayıt listenizden kaldırılır.', 'Numaranız bu kişiye gizli kalmaya devam eder.', 'Kişi yeniden talep gönderirse yine burada görürsünüz.'])
+      : bekliyor
+        ? ['Talebiniz geri çekilir ve listenizden kaldırılır.', `Talep ${ad} kişisinin listesinden de kalkar.`, 'Bu kişiye 1 gün sonra yeniden talep gönderebilirsiniz.']
+        : ['Kayıt yalnızca sizin listenizden kaldırılır.', x.durum === 'kabul' ? 'Kişinin size verdiği izin değişmez; numarası rehberde görünmeye devam eder.' : 'Gerekirse kişiye yeniden talep gönderebilirsiniz.'];
+    const metin = gelen ? `${ad} kişisinin talebi silinecek.` : bekliyor ? `${ad} kişisine gönderdiğiniz talep silinecek.` : `${ad} ile ilgili talep kaydı silinecek.`;
+    if (!await onayIste(metin, 'Evet, sil', true, { baslik: 'Emin misiniz?', ikon: 'cop', maddeler })) return;
     try {
       const r = await Api.iletisimSil(id);
-      bildir(r && r.izinKalkti ? `Kayıt silindi; ${x.kisi.ad} artık numaranızı göremez.` : 'Kayıt silindi.', 'basarili');
+      bildir(r && r.izinKalkti ? `Kayıt silindi; ${x.kisi.ad} artık numaranızı göremez.` : !gelen && bekliyor ? 'Talebiniz geri çekildi.' : 'Kayıt silindi.', 'basarili');
       taleplerEkrani();
     } catch (e) { hataGoster(e); }
   }

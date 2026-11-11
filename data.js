@@ -685,6 +685,7 @@
       const t = D.iletisim.find(x => x.isteyen === o.id && x.hedef === id);
       if (t && (t.durum === 'bekliyor' || t.durum === 'kabul')) return { durum: t.durum };
       if (t && t.durum === 'red' && Date.now() < Date.parse(t.yanit) + 7 * 864e5) throw hata('Bu kişi talebinizi kısa süre önce kabul etmedi. 7 gün sonra yeniden deneyebilirsiniz.');
+      if (t && t.durum === 'iptal' && Date.now() < Date.parse(t.yanit) + 864e5) throw hata('Bu kişiye gönderdiğiniz talebi kısa süre önce sildiniz. Yarın yeniden gönderebilirsiniz.');
       const simdi = new Date().toISOString();
       if (t) Object.assign(t, { durum: 'bekliyor', olusturma: simdi, yanit: '', goruldu: '', silH: '', silI: '' });
       else D.iletisim.push({ id: yeniId('it'), isteyen: o.id, hedef: id, durum: 'bekliyor', olusturma: simdi, yanit: '', goruldu: '' });
@@ -703,6 +704,7 @@
       const r = { durum: t.durum, tarih: t.durum === 'bekliyor' ? t.olusturma : t.yanit, telefonVar: !!h.telefon };
       if (t.durum === 'kabul') r.telefon = h.telefon;
       if (t.durum === 'red') r.tekrar = new Date(Date.parse(t.yanit) + 7 * 864e5).toISOString();
+      if (t.durum === 'iptal') r.tekrar = new Date(Date.parse(t.yanit) + 864e5).toISOString();
       return r;
     },
 
@@ -710,7 +712,7 @@
       const o = talepKimligi();
       await bekle(200);
       const kisi = id => { const k = bul(id); return k && k.durum === 'onayli' ? { id: k.id, ad: k.ad, soyad: k.soyad, yil: k.yil, tur: k.tur, brans: k.tur === 'ogretmen' ? k.brans : '' } : null; };
-      const gelen = D.iletisim.filter(t => t.hedef === o.id && !t.silH && kisi(t.isteyen))
+      const gelen = D.iletisim.filter(t => t.hedef === o.id && !t.silH && t.durum !== 'iptal' && kisi(t.isteyen))
         .map(t => ({ id: t.id, kisi: kisi(t.isteyen), durum: t.durum, olusturma: t.olusturma, yanit: t.yanit }));
       const giden = D.iletisim.filter(t => t.isteyen === o.id && !t.silI && kisi(t.hedef))
         .map(t => ({ id: t.id, kisi: kisi(t.hedef), durum: t.durum, olusturma: t.olusturma, yanit: t.yanit,
@@ -736,13 +738,16 @@
       await bekle(200);
       const t = D.iletisim.find(x => x.id === id && (x.hedef === o.id || x.isteyen === o.id));
       if (!t) throw hata('Talep bulunamadı.');
-      if (t.durum === 'bekliyor') throw hata(t.hedef === o.id ? 'Bu talebi silmeden önce yanıtlayın.' : 'Yanıt bekleyen talep silinemez.');
       const simdi = new Date().toISOString();
       let izinKalkti = false;
       if (t.hedef === o.id) {
         if (t.durum === 'kabul') { t.durum = 'geri'; t.yanit = simdi; t.goruldu = ''; izinKalkti = true; }
+        else if (t.durum === 'bekliyor') { t.durum = 'red'; t.yanit = simdi; t.goruldu = ''; }
         t.silH = simdi;
-      } else { t.silI = simdi; if (!t.goruldu) t.goruldu = simdi; }
+      } else {
+        if (t.durum === 'bekliyor') { t.durum = 'iptal'; t.yanit = simdi; }
+        t.silI = simdi; if (!t.goruldu) t.goruldu = simdi;
+      }
       kaydet();
       return { silindi: true, izinKalkti };
     },
